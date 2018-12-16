@@ -587,13 +587,13 @@ struct conn_node* search_node_conn_table(unsigned char protocol,
 					__be32 dst_ip,
 					__be16 src_port,
 					__be16 dst_port) {
-	struct conn_node * tmp = conn_head;
+	struct conn_node * tmp = conn_table_head;
 	while (tmp != NULL) {
-		if (tmp->conn_row_t->protocol == protocol &&
-		tmp->conn_row_t->src_ip == src_ip &&
-		tmp->conn_row_t->dst_ip == dst_ip &&
-		tmp->conn_row_t->src_port == src_port &&
-		tmp->conn_row_t->dst_port == dst_port &&) {
+		if (tmp->conn->protocol == protocol &&
+		tmp->conn->src_ip == src_ip &&
+		tmp->conn->dst_ip == dst_ip &&
+		tmp->conn->src_port == src_port &&
+		tmp->conn->dst_port == dst_port &&) {
 			return tmp;
 		}
 		tmp = tmp->next;
@@ -604,7 +604,7 @@ struct conn_node* search_node_conn_table(unsigned char protocol,
 void delete_node_conn_table(struct conn_node *link) {
 	link->prev->next = link->next;
 	link->next->prev = link->prev;
-	kfree(conn_node); 
+	kfree(link); 
 }
 
 int insert_first_conn_table(unsigned char protocol,
