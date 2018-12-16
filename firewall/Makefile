@@ -1,12 +1,10 @@
-TARGET = firewall
-OBJS = fw.o
-OBJS += sysfs.o
-
 CURRENT = $(shell uname -r)
 KERNELDIR = /lib/modules/$(CURRENT)/build
 PWD = $(shell pwd)
 
-obj-m += $(TARGET).o
+obj-m := firewall.o
+firewall-objs := sysfs.o fw.o
+OBJS = sysfs.o fw.o
 
 default:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
