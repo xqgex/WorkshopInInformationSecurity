@@ -586,7 +586,7 @@ struct conn_node* search_node_conn_table(unsigned char protocol,
 					__be32 src_ip,
 					__be32 dst_ip,
 					__be16 src_port,
-					__be16 dst_port,) {
+					__be16 dst_port) {
 	struct conn_node * tmp = conn_head;
 	while (tmp != NULL) {
 		if (tmp->conn_row_t->protocol == protocol &&
@@ -602,9 +602,9 @@ struct conn_node* search_node_conn_table(unsigned char protocol,
 }
 
 void delete_node_conn_table(struct conn_node *link) {
-	conn_node->prev->next = conn_node->next;
-	conn_node->next->prev = conn_node->prev;
-	free(conn_node); 
+	link->prev->next = link->next;
+	link->next->prev = link->prev;
+	kfree(conn_node); 
 }
 
 int insert_first_conn_table(unsigned char protocol,
@@ -624,7 +624,7 @@ int insert_first_conn_table(unsigned char protocol,
 	new_conn->dst_ip = dst_ip;
 	new_conn->src_port = src_port;
 	new_conn->dst_port = dst_port;
-	new_conn->status = status;
+	new_conn->state = state;
 	link->conn = new_conn;
 	link->next = conn_table_head; // Point it to old first node
 	link->prev = NULL;
@@ -711,7 +711,7 @@ int write_to_log(unsigned int hooknum, reason_t reason, struct iphdr* ip_header,
 }
 
 int destroy(int stage) {
-	if (12 <= stage) {free(rule_default);}
+	if (12 <= stage) {kfree(rule_default);}
 	if (11 <= stage) {device_remove_file(sysfs_device_rules,	(const struct device_attribute *)&dev_attr_active.attr);}
 	if (10 <= stage) {device_remove_file(sysfs_device_rules,	(const struct device_attribute *)&dev_attr_rules_size.attr);}
 	if (9 <= stage) {device_remove_file(sysfs_device_log,	(const struct device_attribute *)&dev_attr_log_size.attr);}

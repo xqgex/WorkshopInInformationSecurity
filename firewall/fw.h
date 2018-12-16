@@ -35,11 +35,8 @@
 /*******************************************************************/
 typedef enum {
 	HTTP_WAITING_FOR_SYN_ACK	= 1,
-	FTP_WAITING_FOR_SYN_ACK	= 1,
-	STATE_SYN_ACK_SENT	= 6,
-	PROT_UDP	= 17,
-	PROT_OTHER 	= 255,
-	PROT_ANY	= 143,
+	FTP_WAITING_FOR_SYN_ACK		= 10,
+	STATE_SYN_ACK_SENT		= 6,
 } state_t;
 typedef enum { // the protocols we will work with
 	PROT_ICMP	= 1,
