@@ -593,7 +593,7 @@ struct conn_node* search_node_conn_table(unsigned char protocol,
 		tmp->conn->src_ip == src_ip &&
 		tmp->conn->dst_ip == dst_ip &&
 		tmp->conn->src_port == src_port &&
-		tmp->conn->dst_port == dst_port &&) {
+		tmp->conn->dst_port == dst_port) {
 			return tmp;
 		}
 		tmp = tmp->next;
