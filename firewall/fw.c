@@ -4,6 +4,60 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Ilor Ifrach");
 
 //**********************************************************
+//****	Function Declaration				****
+//**********************************************************
+void init_default_rule(void);
+int check_matching_packet_rule(rule_t *, struct iphdr *, __be16, __be16, ack_t);
+long str_to_long(char *);
+rule_t* parse_rule_line(char *);
+__be32 size_to_mask(__u8);
+unsigned int hook_func(unsigned int, struct sk_buff *, const struct net_device *, const struct net_device *, int (*okfn)(struct sk_buff *));
+void delete_rules_array(void);
+static ssize_t rules_read(struct file *, char *, size_t, loff_t *);
+static ssize_t rules_write(struct file *, const char *, size_t, loff_t *);
+static ssize_t log_read(struct file *, char *, size_t, loff_t *);
+ssize_t active_display(struct device *, struct device_attribute *, char *);
+ssize_t active_modify(struct device *, struct device_attribute *, const char *, size_t);
+ssize_t rules_size_display(struct device *, struct device_attribute *, char *);
+ssize_t log_size_display(struct device *, struct device_attribute *, char *);
+ssize_t log_clear_modify(struct device *, struct device_attribute *, const char *, size_t);
+static int __init my_module_init_function(void);
+static void __exit my_module_exit_function(void);
+int is_empty(void);
+int insert_first(unsigned char, unsigned char, unsigned char, __be32, __be32, __be16, __be16, reason_t);
+int delete_first(void);
+int write_to_log(unsigned int hooknum, reason_t reason, struct iphdr* ip_header, __be16 src_port, __be16 dst_port, unsigned int action);
+
+//**********************************************************
+//****	Module Variables				****
+//**********************************************************
+static int major_number_rules;
+static int major_number_log;
+static int active = 1;
+static int rules_counter = 0;
+static unsigned long log_counter = 0;
+static rule_t* rules_array[MAX_RULES];
+static rule_t* rule_default;
+static struct class* sysfs_class = NULL;
+static struct device* sysfs_device_rules = NULL;
+static struct device* sysfs_device_log = NULL;
+static struct log_node* log_head = NULL;
+static struct nf_hook_ops nfho; // Main hook function
+static struct file_operations fops_rules = {
+	.owner = THIS_MODULE,
+	.read = rules_read,
+	.write = rules_write
+};
+static struct file_operations fops_log = {
+	.owner = THIS_MODULE,
+	.read = log_read
+};
+static DEVICE_ATTR(active,	S_IRWXU	| S_IRWXG | S_IRWXO, active_display,	active_modify);
+static DEVICE_ATTR(rules_size,	S_IRUSR | S_IRGRP | S_IROTH, rules_size_display,NULL);
+static DEVICE_ATTR(log_size,	S_IRUSR | S_IRGRP | S_IROTH, log_size_display,	NULL);
+static DEVICE_ATTR(log_clear,	S_IWUSR	| S_IWGRP | S_IWOTH, NULL,		log_clear_modify);
+
+//**********************************************************
 //****	Module Functions				****
 //**********************************************************
 void init_default_rule(void) {
@@ -269,6 +323,183 @@ void delete_rules_array(void) {
 		}
 	}
 	rules_counter = 0;
+}
+
+// Called when a process, which already opened the dev file, attempts to read from it.
+static ssize_t rules_read(struct file* filp, char* buffer, size_t length, loff_t* offset) {
+	int bytes_read = 0; // Number of bytes actually written to the buffer
+	int i = 0;
+	int length_rule = 0;
+	char* msg = (char *)kmalloc(sizeof(char)*MAX_RULES_LENGTH*MAX_RULES, GFP_ATOMIC);
+	char* loop_rules = (char *)kmalloc(sizeof(char)*MAX_RULES_LENGTH, GFP_ATOMIC);
+	if (!msg || !loop_rules) {
+		printk("rules_read kmalloc failed\n");
+		return 0;
+	}
+	*msg = '\0';
+	*loop_rules = '\0';
+	for (i=0; i<rules_counter; i++) {
+		length_rule = sprintf(loop_rules, "%s %d %lu %d %lu %d %d %d %d %d %d\n",
+					rules_array[i]->rule_name,
+					(int)rules_array[i]->direction,
+					(unsigned long)rules_array[i]->src_ip,
+					(int)rules_array[i]->src_prefix_size,
+					(unsigned long)rules_array[i]->dst_ip,
+					(int)rules_array[i]->dst_prefix_size,
+					(int)rules_array[i]->protocol,
+					(int)rules_array[i]->src_port,
+					(int)rules_array[i]->dst_port,
+					(int)rules_array[i]->ack,
+					(int)rules_array[i]->action);
+		if (length_rule <= 0) {
+			printk("rules_read sprintf failed\n");
+			kfree(msg);
+			kfree(loop_rules);
+			return bytes_read;
+		}
+		bytes_read += length_rule;
+		strncat(msg, loop_rules, length_rule);
+	}
+	if (copy_to_user(buffer, msg, bytes_read) != 0) {
+		printk("rules_read copy_to_user failed\n");
+	}
+	kfree(msg);
+	kfree(loop_rules);
+	return bytes_read;
+}
+
+// Called when a process writes to dev file: echo "hi" > /dev/hello
+static ssize_t rules_write(struct file* filp, const char* buff, size_t len, loff_t* off) {
+	rule_t* res;
+	char* loop_token;
+	char* loop_end;
+	char* msg = (char *)kmalloc(sizeof(char)*MAX_RULES_LENGTH*MAX_RULES, GFP_ATOMIC);
+	char* loop_line = (char *)kmalloc(sizeof(char)*MAX_RULES_LENGTH*MAX_RULES, GFP_ATOMIC);
+	if (!msg || !loop_line) {
+		printk("rules_write kmalloc failed\n");
+		return 0;
+	}
+	*msg = '\0';
+	*loop_line = '\0';
+	if (snprintf(msg, len, "%s", buff) < 0) {
+		printk("rules_write snprintf failed\n");
+		kfree(msg);
+		kfree(loop_line);
+		return 0;
+	}
+	delete_rules_array();
+	strcpy(loop_line, msg);
+	if (loop_line == NULL) {
+		kfree(msg);
+		kfree(loop_line);
+		return -EINVAL;
+	}
+	if (len == 0) {
+		kfree(msg);
+		kfree(loop_line);
+		return len;
+	}
+	loop_token = loop_line;
+	loop_end = loop_line;
+	while (loop_token != NULL) {
+		strsep(&loop_end, "\n");
+		res = parse_rule_line(loop_token);
+		if (res == NULL){
+			delete_rules_array();
+			printk("Invalid rules file\n");
+			kfree(loop_line);
+			kfree(msg);
+			return -EINVAL;
+		} else {
+			rules_array[rules_counter] = res;
+			rules_counter++;
+		}
+		loop_token = loop_end;
+	}
+	kfree(loop_line);
+	kfree(msg);
+	return len;
+}
+
+// Called when a process, which already opened the dev file, attempts to read from it.
+static ssize_t log_read(struct file* filp, char* buffer, size_t length, loff_t* offset) {
+	int bytes_read = 0; // Number of bytes actually written to the buffer
+	struct log_node* tmp = log_head;
+	int length_log = 0;
+	char* msg = (char *)kmalloc(sizeof(char)*log_counter*MAX_LOG_LENGTH, GFP_ATOMIC);
+	char* loop_log = (char *)kmalloc(sizeof(char)*MAX_LOG_LENGTH, GFP_ATOMIC);
+	if (!msg || !loop_log) {
+		printk("log_read kmalloc failed\n");
+		return 0;
+	}
+	*msg = '\0';
+	*loop_log = '\0';
+	while (tmp != NULL) {
+		length_log = sprintf(loop_log, "timestamp: %ld, protocol: %u, action: %u, hooknum: %u, src_ip: %d, dst_ip: %d, src_port: %d, dst_port: %d, reason: %d, count: %d\n",
+					tmp->log->timestamp,
+					tmp->log->protocol,
+					tmp->log->action,
+					tmp->log->hooknum,
+					tmp->log->src_ip,
+					tmp->log->dst_ip,
+					tmp->log->src_port,
+					tmp->log->dst_port,
+					(int)tmp->log->reason,
+					tmp->log->count);
+		if (length_log <= 0) {
+			printk("log_read sprintf failed\n");
+			kfree(msg);
+			kfree(loop_log);
+			return bytes_read;
+		}
+		bytes_read += length_log;
+		strncat(msg, loop_log, length_log);
+		tmp = tmp->next;
+	}
+	if (copy_to_user(buffer, msg, bytes_read) != 0) {
+		printk("log_read copy_to_user failed\n");
+	}
+	kfree(msg);
+	kfree(loop_log);
+	return bytes_read;
+}
+
+ssize_t active_display(struct device* dev, struct device_attribute* attr, char* buf) {
+	return scnprintf(buf, PAGE_SIZE, "%d\n", active);
+}
+
+ssize_t active_modify(struct device* dev, struct device_attribute* attr, const char* buf, size_t count) {
+	int temp = 0;
+	if (sscanf(buf, "%d", &temp) == 1) {
+		if (temp == 0) {
+			active = 0;
+			printk("Firewall status changed to => deactive\n");
+		} else if (temp == 1) {
+			active = 1;
+			printk("Firewall status changed to => active\n");
+		} else {
+			printk("Invalid value for active");
+		}
+	}
+	return count;
+}
+
+ssize_t rules_size_display(struct device* dev, struct device_attribute* attr, char* buf) {
+	return scnprintf(buf, PAGE_SIZE, "%d", rules_counter);
+}
+
+ssize_t log_size_display(struct device* dev, struct device_attribute* attr, char* buf) {
+	return scnprintf(buf, PAGE_SIZE, "%ld", log_counter);
+}
+
+ssize_t log_clear_modify(struct device* dev, struct device_attribute* attr, const char* buf, size_t count) {
+	while (is_empty() == 0) {
+		if (delete_first() == 0){
+			printk("log_clear_modify delete_first failed\n");
+			return 0;
+		}
+	}
+	return count;
 }
 
 static int __init my_module_init_function(void) {

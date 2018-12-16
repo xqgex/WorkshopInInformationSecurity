@@ -1,17 +1,11 @@
-CURRENT = $(shell uname -r)
-KERNELDIR = /lib/modules/$(CURRENT)/build
-PWD = $(shell pwd)
+obj-m := firewall.o 
+firewall-objs := fw.o
 
-obj-m := firewall.o
-firewall-objs := sysfs.o fw.o
-OBJS = sysfs.o fw.o
+KERNELDIR ?= /lib/modules/$(shell uname -r)/build
+PWD  := $(shell pwd)
 
 default:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
 
-$(TARGET).o: fw.o sysfs.o
-	$(LD) $(LD_RFLAG) -r -o $@ $(OBJS)
-
 clean:
-	-rm -f *.o *.ko
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) clean
