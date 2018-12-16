@@ -1,10 +1,15 @@
-obj-m := firewall.o 
-firewall-objs := fw.o
+MODULE_NAME = firewall
 
+SRC     := fw.c sysfs.c
+
+$(MODULE_NAME)-objs = $(SRC:.c=.o)
+#firewall-objs := fw.o
+
+obj-m := $(MODULE_NAME).o
 KERNELDIR ?= /lib/modules/$(shell uname -r)/build
-PWD  := $(shell pwd)
+PWD := $(shell pwd)
 
-default:
+all:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
 
 clean:
