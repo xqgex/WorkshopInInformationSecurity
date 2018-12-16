@@ -17,6 +17,7 @@
 #define ARGS_LOAD_RULES		"load_rules"
 #define ARGS_SHOW_LOG		"show_log"
 #define ARGS_CLEAR_LOG		"clear_log"
+#define ARGS_SHOW_CONN_TABLE	"show_connection_table"
 
 #define FILE_RULES		"/dev/fw_rules"
 #define FILE_RULES_ACTIVE	"/sys/class/fw/fw_rules/active"
@@ -24,6 +25,7 @@
 #define FILE_LOG		"/dev/fw_log"
 #define FILE_LOG_SIZE		"/sys/class/fw/fw_log/log_size"
 #define FILE_LOG_CLEAR		"/sys/class/fw/fw_log/log_clear"
+#define FILE_CONN_TABLE		"/sys/class/fw/conn_tab"
 
 long str2long(char* input) {
 	char *ptr;
@@ -575,6 +577,14 @@ int main(int argc, char **argv) {
 			free(log);
 		} else if (strcmp(argv[1],ARGS_CLEAR_LOG)==0) {
 			return write_file(FILE_LOG_CLEAR, "c", 1, O_WRONLY, 1);
+		} else if (strcmp(argv[1],ARGS_SHOW_CONN_TABLE)==0) {
+			char* conn_table = malloc(PAGE_SIZE * sizeof(char));
+			if (read_file(FILE_CONN_TABLE, &conn_table, PAGE_SIZE, O_RDONLY, 1) == 1) {
+				free(conn_table);
+				return 1;
+			}
+			printf("%s" , conn_table);
+			free(conn_table);
 		} else {
 			printf("Invalid call\n");
 		}
