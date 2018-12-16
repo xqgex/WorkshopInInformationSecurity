@@ -36,12 +36,14 @@ static int major_number_log;
 static int active = 1;
 static int rules_counter = 0;
 static unsigned long log_counter = 0;
+static unsigned long conn_counter = 0;
 static rule_t* rules_array[MAX_RULES];
 static rule_t* rule_default;
 static struct class* sysfs_class = NULL;
 static struct device* sysfs_device_rules = NULL;
 static struct device* sysfs_device_log = NULL;
 static struct log_node* log_head = NULL;
+static struct conn_node* conn_table_head = NULL;
 static struct nf_hook_ops nfho; // Main hook function
 static struct file_operations fops_rules = {
 	.owner = THIS_MODULE,
@@ -605,6 +607,56 @@ int is_empty(void) {
 		return 1;
 	}
 	return 0;
+}
+
+struct conn_node* search_node_conn_table(unsigned char protocol,
+					__be32 src_ip,
+					__be32 dst_ip,
+					__be16 src_port,
+					__be16 dst_port,) {
+	struct conn_node * tmp = conn_head;
+	while (tmp != NULL) {
+		if (tmp->conn_row_t->protocol == protocol &&
+		tmp->conn_row_t->src_ip == src_ip &&
+		tmp->conn_row_t->dst_ip == dst_ip &&
+		tmp->conn_row_t->src_port == src_port &&
+		tmp->conn_row_t->dst_port == dst_port &&) {
+			return tmp;
+		}
+		tmp = tmp->next;
+	}
+	return tmp;
+}
+
+void delete_node_conn_table(struct conn_node *link) {
+	conn_node->prev->next = conn_node->next;
+	conn_node->next->prev = conn_node->prev;
+	free(conn_node); 
+}
+
+int insert_first_conn_table(unsigned char protocol,
+		__be32 src_ip,
+		__be32 dst_ip,
+		__be16 src_port,
+		__be16 dst_port,
+		state_t state) {
+	struct conn_node *link = (struct conn_node*)kmalloc(sizeof(struct conn_node), GFP_ATOMIC); // Create a link
+	conn_row_t *new_conn = (conn_row_t*)kmalloc(sizeof(conn_row_t), GFP_ATOMIC);
+	if (!link || !new_conn) {
+		printk("insert_first_conn_table kmalloc failed\n");
+		return 0;
+	}
+	new_conn->protocol = protocol;
+	new_conn->src_ip = src_ip;
+	new_conn->dst_ip = dst_ip;
+	new_conn->src_port = src_port;
+	new_conn->dst_port = dst_port;
+	new_conn->status = status;
+	link->conn = new_conn;
+	link->next = conn_table_head; // Point it to old first node
+	link->prev = NULL;
+	conn_counter++;
+	return 1;		
 }
 
 int insert_first(unsigned char protocol,
