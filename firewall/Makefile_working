@@ -1,0 +1,14 @@
+MODULE_MAME = firewall
+ 
+SRCS = main.c fwControl/fwControl.c connectionTable/connectionTable.c packetsReaddress/packetsReaddress.c commonUtils/commonUtils.c packetsInspector/packetsInspector.c connTabDevice/connTabDevice.c fwRulesLoader/fwRulesLoader.c myNfHooks/myNfHooks.c fwLogDevice/fwLogDevice.c fwLogLinkedList/fwLogLinkedList.c LinkedList/LinkedList.c debugLog/debugLog.c 
+
+OBJS =  $(SRCS:.c=.o)
+ 
+obj-m += $(MODULE_MAME).o
+$(MODULE_MAME)-y = $(OBJS)
+ 
+all:
+	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
+
+clean:
+	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
