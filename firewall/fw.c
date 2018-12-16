@@ -260,6 +260,7 @@ unsigned int hook_func(unsigned int hooknum,
 	__u16 fin = 0; //fin flag in tcp
 	__u16 urg = 0; //urg flag in tcp
 	__u16 psh = 0; //psh flag in tcp
+	int check_dynamic = 0;
 	int res = 0;
 	int i = 0;
 	unsigned int action = NF_DROP;
@@ -271,8 +272,10 @@ unsigned int hook_func(unsigned int hooknum,
 		dst_port = tcp_header->dest;
 		if (tcp_header->ack == 0) {
 			ack = ACK_NO;
+			
 		} else {
 			ack = ACK_YES;
+			check_dynamic = 1;
 		}
 		fin = tcp_header->fin;
 		urg = tcp_header->urg;
@@ -289,7 +292,16 @@ unsigned int hook_func(unsigned int hooknum,
 	if (active == 0) {
 		action = NF_ACCEPT;
 		reason = REASON_FW_INACTIVE;
-	} else {
+	} else if (check_dynamic == 1) { // Compare to the dynamic table
+		// Check at the dynamic table
+		// TODO Check at the dynamic table & also check timeout < 25 for 3-way handshae
+		reason = REASON_NO_MATCHING_RULE; // TODO XXX
+		action = NF_ACCEPT; // TODO XXX
+		//
+		if (action == NF_ACCEPT) {
+			// TODO Update dynamic table
+		}
+	} else { // Compare to the static table
 		// Default rule
 		res = check_matching_packet_rule(rule_default, ip_header, src_port, dst_port, ack);
 		if (res == 1) {
@@ -313,6 +325,10 @@ unsigned int hook_func(unsigned int hooknum,
 				reason = REASON_NO_MATCHING_RULE;
 				action = NF_ACCEPT;
 			}
+		}
+		// If protocol is TCP (ACK is off)
+		if ((ip_header->protocol == IPPROTO_TCP) && (action == NF_ACCEPT)) {
+			// TODO Add new line to the dynamic table
 		}
 	}
 	if (write_to_log(hooknum, reason, ip_header, src_port, dst_port, action) == 0) {
