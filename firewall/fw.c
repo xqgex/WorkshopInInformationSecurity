@@ -25,6 +25,9 @@ ssize_t conn_tab_display(struct device *, struct device_attribute *, char *);
 static int __init my_module_init_function(void);
 static void __exit my_module_exit_function(void);
 int is_empty(void);
+struct conn_node* search_node_conn_table(__be32, __be32, __be16, __be16);
+void delete_node_conn_table(struct conn_node *);
+int insert_first_conn_table(__be32, __be32, __be16, __be16, state_t);
 int insert_first(unsigned char, unsigned char, unsigned char, __be32, __be32, __be16, __be16, reason_t);
 int delete_first(void);
 int write_to_log(unsigned int hooknum, reason_t reason, struct iphdr* ip_header, __be16 src_port, __be16 dst_port, unsigned int action);
@@ -257,6 +260,7 @@ unsigned int hook_func(unsigned int hooknum,
 	struct icmphdr* icmp_header;
 	struct udphdr* udp_header;
 	struct tcphdr* tcp_header;
+	struct conn_node* searced_connection;
 	__u16 fin = 0; //fin flag in tcp
 	__u16 urg = 0; //urg flag in tcp
 	__u16 psh = 0; //psh flag in tcp
@@ -295,6 +299,18 @@ unsigned int hook_func(unsigned int hooknum,
 	} else if (check_dynamic == 1) { // Compare to the dynamic table
 		// Check at the dynamic table
 		// TODO Check at the dynamic table & also check timeout < 25 for 3-way handshae
+
+		searced_connection = search_node_conn_table(ip_header->saddr, ip_header->daddr, src_port, dst_port);
+		if (searced_connection == NULL) {
+//			reason = ???; // TODO TODO TODO
+			return NF_DROP;
+		} else {
+		
+		}
+
+	/*struct conn_node* search_node_conn_table(unsigned char, __be32, __be32, __be16, __be16);*/
+	/*void delete_node_conn_table(struct conn_node *);*/
+
 		reason = REASON_NO_MATCHING_RULE; // TODO XXX
 		action = NF_ACCEPT; // TODO XXX
 		//
@@ -328,7 +344,9 @@ unsigned int hook_func(unsigned int hooknum,
 		}
 		// If protocol is TCP (ACK is off)
 		if ((ip_header->protocol == IPPROTO_TCP) && (action == NF_ACCEPT)) {
-			// TODO Add new line to the dynamic table
+			if (insert_first_conn_table = search_node_conn_table(ip_header->saddr, ip_header->daddr, src_port, dst_port, TODO_TODO_TODO) == 0) { // TODO TODO TODO
+				printk("hook_func failed to insert new record into the dynamic rules table\n");
+			}
 		}
 	}
 	if (write_to_log(hooknum, reason, ip_header, src_port, dst_port, action) == 0) {
@@ -598,15 +616,10 @@ int is_empty(void) {
 	return 0;
 }
 
-struct conn_node* search_node_conn_table(unsigned char protocol,
-					__be32 src_ip,
-					__be32 dst_ip,
-					__be16 src_port,
-					__be16 dst_port) {
+struct conn_node* search_node_conn_table(__be32 src_ip, __be32 dst_ip, __be16 src_port, __be16 dst_port) {
 	struct conn_node * tmp = conn_table_head;
 	while (tmp != NULL) {
-		if (tmp->conn->protocol == protocol &&
-		tmp->conn->src_ip == src_ip &&
+		if (tmp->conn->src_ip == src_ip &&
 		tmp->conn->dst_ip == dst_ip &&
 		tmp->conn->src_port == src_port &&
 		tmp->conn->dst_port == dst_port) {
@@ -617,25 +630,19 @@ struct conn_node* search_node_conn_table(unsigned char protocol,
 	return tmp;
 }
 
-void delete_node_conn_table(struct conn_node *link) {
+void delete_node_conn_table(struct conn_node* link) {
 	link->prev->next = link->next;
 	link->next->prev = link->prev;
 	kfree(link); 
 }
 
-int insert_first_conn_table(unsigned char protocol,
-		__be32 src_ip,
-		__be32 dst_ip,
-		__be16 src_port,
-		__be16 dst_port,
-		state_t state) {
+int insert_first_conn_table(__be32 src_ip, __be32 dst_ip, __be16 src_port, __be16 dst_port, state_t state) {
 	struct conn_node *link = (struct conn_node*)kmalloc(sizeof(struct conn_node), GFP_ATOMIC); // Create a link
 	conn_row_t *new_conn = (conn_row_t*)kmalloc(sizeof(conn_row_t), GFP_ATOMIC);
 	if (!link || !new_conn) {
 		printk("insert_first_conn_table kmalloc failed\n");
 		return 0;
 	}
-	new_conn->protocol = protocol;
 	new_conn->src_ip = src_ip;
 	new_conn->dst_ip = dst_ip;
 	new_conn->src_port = src_port;
