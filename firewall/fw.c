@@ -21,26 +21,30 @@ ssize_t active_modify(struct device *, struct device_attribute *, const char *, 
 ssize_t rules_size_display(struct device *, struct device_attribute *, char *);
 ssize_t log_size_display(struct device *, struct device_attribute *, char *);
 ssize_t log_clear_modify(struct device *, struct device_attribute *, const char *, size_t);
+ssize_t conn_tab_display(struct device *, struct device_attribute *, char *);
 static int __init my_module_init_function(void);
 static void __exit my_module_exit_function(void);
 int is_empty(void);
 int insert_first(unsigned char, unsigned char, unsigned char, __be32, __be32, __be16, __be16, reason_t);
 int delete_first(void);
 int write_to_log(unsigned int hooknum, reason_t reason, struct iphdr* ip_header, __be16 src_port, __be16 dst_port, unsigned int action);
+int destroy(int);
 
 //**********************************************************
 //****	Module Variables				****
 //**********************************************************
-static int major_number_rules;
-static int major_number_log;
+static int major_number_rules = -1;
+static int major_number_log = -1;
+static int major_number_fw = -1;
 static int active = 1;
 static int rules_counter = 0;
 static unsigned long log_counter = 0;
 static rule_t* rules_array[MAX_RULES];
 static rule_t* rule_default;
 static struct class* sysfs_class = NULL;
-static struct device* sysfs_device_rules = NULL;
 static struct device* sysfs_device_log = NULL;
+static struct device* sysfs_device_rules = NULL;
+static struct device* sysfs_device_fw = NULL;
 static struct log_node* log_head = NULL;
 static struct nf_hook_ops nfho; // Main hook function
 static struct file_operations fops_rules = {
@@ -56,6 +60,7 @@ static DEVICE_ATTR(active,	S_IRWXU	| S_IRWXG | S_IRWXO, active_display,	active_m
 static DEVICE_ATTR(rules_size,	S_IRUSR | S_IRGRP | S_IROTH, rules_size_display,NULL);
 static DEVICE_ATTR(log_size,	S_IRUSR | S_IRGRP | S_IROTH, log_size_display,	NULL);
 static DEVICE_ATTR(log_clear,	S_IWUSR	| S_IWGRP | S_IWOTH, NULL,		log_clear_modify);
+static DEVICE_ATTR(conn_tab,	S_IRUSR | S_IRGRP | S_IROTH, conn_tab_display,	NULL);
 
 //**********************************************************
 //****	Module Functions				****
@@ -502,6 +507,10 @@ ssize_t log_clear_modify(struct device* dev, struct device_attribute* attr, cons
 	return count;
 }
 
+ssize_t conn_tab_display(struct device* dev, struct device_attribute* attr, char* buf) {
+	return scnprintf(buf, PAGE_SIZE, "%d", 0); // TODO conn_tab
+}
+
 static int __init my_module_init_function(void) {
 	nfho.hook = hook_func; // Function to call when conditions below met
 	nfho.hooknum = NF_INET_PRE_ROUTING;//NF_INET_FORWARD;
@@ -509,95 +518,59 @@ static int __init my_module_init_function(void) {
 	nfho.priority = NF_IP_PRI_FIRST; // Set to highest priority over all other hook functions
 	nf_register_hook(&nfho); // Register hook
 	// Create char device
-	major_number_rules = register_chrdev(0, DEVICE_NAME_RULES, &fops_rules);
-	if (major_number_rules < 0) {
-		return -1;
-	}
 	major_number_log = register_chrdev(0, DEVICE_NAME_LOG, &fops_log);
 	if (major_number_log < 0) {
-		return -1;
+		return destroy(0);
+	}
+	major_number_rules = register_chrdev(0, DEVICE_NAME_RULES, &fops_rules);
+	if (major_number_rules < 0) {
+		return destroy(1);
 	}
 	// Create sysfs class
 	sysfs_class = class_create(THIS_MODULE, CLASS_NAME);
 	if (IS_ERR(sysfs_class)) {
-		unregister_chrdev(major_number_rules, DEVICE_NAME_RULES);
-		unregister_chrdev(major_number_log, DEVICE_NAME_LOG);
-		return -1;
+		return destroy(2);
 	}
 	// Create sysfs device
-	sysfs_device_rules = device_create(sysfs_class, NULL, MKDEV(major_number_rules, 0), NULL, CLASS_NAME "_" DEVICE_NAME_RULES);
-	if (IS_ERR(sysfs_device_rules)) {
-		class_destroy(sysfs_class);
-		unregister_chrdev(major_number_rules, DEVICE_NAME_RULES);
-		unregister_chrdev(major_number_log, DEVICE_NAME_LOG);
-		return -1;
-	}
 	sysfs_device_log = device_create(sysfs_class, NULL, MKDEV(major_number_log, 0), NULL, CLASS_NAME "_" DEVICE_NAME_LOG);
 	if (IS_ERR(sysfs_device_log)) {
-		class_destroy(sysfs_class);
-		unregister_chrdev(major_number_rules, DEVICE_NAME_RULES);
-		unregister_chrdev(major_number_log, DEVICE_NAME_LOG);
-		return -1;
+		return destroy(3);
+	}
+	sysfs_device_rules = device_create(sysfs_class, NULL, MKDEV(major_number_rules, 0), NULL, CLASS_NAME "_" DEVICE_NAME_RULES);
+	if (IS_ERR(sysfs_device_rules)) {
+		return destroy(4);
+	}
+	sysfs_device_fw = device_create(sysfs_class, NULL, MKDEV(major_number_fw, 0), NULL, CLASS_NAME "_" DEVICE_NAME_FW);
+	if (IS_ERR(sysfs_device_fw)) {
+		return destroy(5);
 	}
 	// Create sysfs file attributes	
 	if (device_create_file(sysfs_device_rules, (const struct device_attribute *)&dev_attr_active.attr)) {
-		device_destroy(sysfs_class, MKDEV(major_number_rules, 0));
-		device_destroy(sysfs_class, MKDEV(major_number_log, 0));
-		class_destroy(sysfs_class);
-		unregister_chrdev(major_number_rules, DEVICE_NAME_RULES);
-		unregister_chrdev(major_number_log, DEVICE_NAME_LOG);
-		return -1;
+		return destroy(6);
 	}
 	if (device_create_file(sysfs_device_rules, (const struct device_attribute *)&dev_attr_rules_size.attr)) {
-		device_remove_file(sysfs_device_rules, (const struct device_attribute *)&dev_attr_active.attr);
-		device_destroy(sysfs_class, MKDEV(major_number_rules, 0));
-		device_destroy(sysfs_class, MKDEV(major_number_log, 0));
-		class_destroy(sysfs_class);
-		unregister_chrdev(major_number_rules, DEVICE_NAME_RULES);
-		unregister_chrdev(major_number_log, DEVICE_NAME_LOG);
-		return -1;
+		return destroy(7);
 	}
 	if (device_create_file(sysfs_device_log, (const struct device_attribute *)&dev_attr_log_size.attr)) {
-		device_remove_file(sysfs_device_rules, (const struct device_attribute *)&dev_attr_active.attr);
-		device_remove_file(sysfs_device_rules, (const struct device_attribute *)&dev_attr_rules_size.attr);
-		device_destroy(sysfs_class, MKDEV(major_number_rules, 0));
-		device_destroy(sysfs_class, MKDEV(major_number_log, 0));
-		class_destroy(sysfs_class);
-		unregister_chrdev(major_number_rules, DEVICE_NAME_RULES);
-		unregister_chrdev(major_number_log, DEVICE_NAME_LOG);
-		return -1;
+		return destroy(8);
 	}
 	if (device_create_file(sysfs_device_log, (const struct device_attribute *)&dev_attr_log_clear.attr)) {
-		device_remove_file(sysfs_device_rules, (const struct device_attribute *)&dev_attr_active.attr);
-		device_remove_file(sysfs_device_rules, (const struct device_attribute *)&dev_attr_rules_size.attr);
-		device_remove_file(sysfs_device_log, (const struct device_attribute *)&dev_attr_log_size.attr);
-		device_destroy(sysfs_class, MKDEV(major_number_rules, 0));
-		device_destroy(sysfs_class, MKDEV(major_number_log, 0));
-		class_destroy(sysfs_class);
-		unregister_chrdev(major_number_rules, DEVICE_NAME_RULES);
-		unregister_chrdev(major_number_log, DEVICE_NAME_LOG);
-		return -1;
+		return destroy(9);
+	}
+	if (device_create_file(sysfs_device_fw, (const struct device_attribute *)&dev_attr_conn_tab.attr)) {
+		return destroy(10);
 	}
 	rule_default = (rule_t*)kmalloc(sizeof(rule_t), GFP_ATOMIC);
 	if (!rule_default) {
 		printk("rule_default kmalloc failed\n");
-		return -1;
+		return destroy(11);
 	}
 	init_default_rule();
 	return 0; // If non-0 return means init_module failed
 }
 
 static void __exit my_module_exit_function(void) {
-	nf_unregister_hook(&nfho);
-	device_remove_file(sysfs_device_rules,	(const struct device_attribute *)&dev_attr_active.attr);
-	device_remove_file(sysfs_device_rules,	(const struct device_attribute *)&dev_attr_rules_size.attr);
-	device_remove_file(sysfs_device_log,	(const struct device_attribute *)&dev_attr_log_size.attr);
-	device_remove_file(sysfs_device_log,	(const struct device_attribute *)&dev_attr_log_clear.attr);
-	device_destroy(sysfs_class, MKDEV(major_number_rules, 0));
-	device_destroy(sysfs_class, MKDEV(major_number_log, 0));
-	class_destroy(sysfs_class);
-	unregister_chrdev(major_number_rules, DEVICE_NAME_RULES);
-	unregister_chrdev(major_number_log, DEVICE_NAME_LOG);
+	destroy(99);
 }
 
 int is_empty(void) {
@@ -683,6 +656,22 @@ int write_to_log(unsigned int hooknum, reason_t reason, struct iphdr* ip_header,
 		return 0;
 	}
 	return 1;
+}
+
+int destroy(int stage) {
+	if (12 <= stage) {free(rule_default);}
+	if (11 <= stage) {device_remove_file(sysfs_device_rules,	(const struct device_attribute *)&dev_attr_active.attr);}
+	if (10 <= stage) {device_remove_file(sysfs_device_rules,	(const struct device_attribute *)&dev_attr_rules_size.attr);}
+	if (9 <= stage) {device_remove_file(sysfs_device_log,	(const struct device_attribute *)&dev_attr_log_size.attr);}
+	if (8 <= stage) {device_remove_file(sysfs_device_log,	(const struct device_attribute *)&dev_attr_log_clear.attr);}
+	if (7 <= stage) {device_remove_file(sysfs_device_fw,	(const struct device_attribute *)&dev_attr_conn_tab.attr);}
+	if (6 <= stage) {device_destroy(sysfs_class, MKDEV(major_number_fw, 0));}
+	if (5 <= stage) {device_destroy(sysfs_class, MKDEV(major_number_rules, 0));}
+	if (4 <= stage) {device_destroy(sysfs_class, MKDEV(major_number_log, 0));}
+	if (3 <= stage) {class_destroy(sysfs_class);}
+	if (2 <= stage) {unregister_chrdev(major_number_rules, DEVICE_NAME_RULES);}
+	if (1 <= stage) {unregister_chrdev(major_number_log, DEVICE_NAME_LOG);}
+	return -1;
 }
 
 module_init(my_module_init_function);
