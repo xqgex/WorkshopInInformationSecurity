@@ -15,6 +15,15 @@
 #include <linux/uaccess.h>
 #include <linux/time.h>
 
+typedef enum {
+	HTTP_WAITING_FOR_SYN_ACK	= 1,
+	FTP_WAITING_FOR_SYN_ACK	= 1,
+	STATE_SYN_ACK_SENT	= 6,
+	PROT_UDP	= 17,
+	PROT_OTHER 	= 255,
+	PROT_ANY	= 143,
+} state_t;
+
 // the protocols we will work with
 typedef enum {
 	PROT_ICMP	= 1,
@@ -93,18 +102,34 @@ typedef struct {
 	unsigned char  	protocol;     	// values from: prot_t
 	unsigned char  	action;       	// valid values: NF_ACCEPT, NF_DROP
 	unsigned char  	hooknum;      	// as received from netfilter hook
-	__be32   		src_ip;		  	// if you use this struct in userspace, change the type to unsigned int
-	__be32			dst_ip;		  	// if you use this struct in userspace, change the type to unsigned int
-	__be16 			src_port;	  	// if you use this struct in userspace, change the type to unsigned short
-	__be16 			dst_port;	  	// if you use this struct in userspace, change the type to unsigned short
+	__be32   	src_ip;		  	// if you use this struct in userspace, change the type to unsigned int
+	__be32		dst_ip;		  	// if you use this struct in userspace, change the type to unsigned int
+	__be16 		src_port;	  	// if you use this struct in userspace, change the type to unsigned short
+	__be16 		dst_port;	  	// if you use this struct in userspace, change the type to unsigned short
 	reason_t     	reason;       	// rule#index, or values from: reason_t
 	unsigned int   	count;        	// counts this line's hits
 	struct list_head list; /* kernel's list structure */
 } log_row_t;
 
+// conn_table
+typedef struct {
+	unsigned char  	protocol;     	// values from: prot_t
+	__be32   	src_ip;		  	// if you use this struct in userspace, change the type to unsigned int
+	__be32		dst_ip;		  	// if you use this struct in userspace, change the type to unsigned int
+	__be16 		src_port;	  	// if you use this struct in userspace, change the type to unsigned short
+	__be16 		dst_port;	  	// if you use this struct in userspace, change the type to unsigned short
+	state_t		state;
+} conn_row_t;
+
 struct log_node {
 	log_row_t* log;
 	struct log_node *next;
+};
+
+struct conn_node {
+	conn_row_t* conn;
+	struct conn_node *next;
+	struct conn_node *prev;
 };
 
 #endif // _FW_H_
