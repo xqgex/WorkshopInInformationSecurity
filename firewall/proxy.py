@@ -41,6 +41,7 @@ def main():
 	server_thread.start()
 	while SERVER.running:
 		time.sleep(10)
+	print "Proxy server terminated"
 
 if __name__ == "__main__":
 	if os.name == "posix":

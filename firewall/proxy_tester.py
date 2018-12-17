@@ -4,7 +4,7 @@ import socket, time
 
 PROXY_IP = "127.1.2.0"
 PROXY_PORT = 7120
-BUFFER_SIZE = 4096
+BUFFER_SIZE = 4096s
 
 if __name__ == "__main__":
 	sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -15,6 +15,6 @@ if __name__ == "__main__":
 		print "Received {} from {}".format(data, server)
 		time.sleep(3)
 	print "closing socket"
-	sock.sendto("Close_Connection", (PROXY_IP, PROXY_PORT))
+	sock.sendto("Closeonnection", (PROXY_IP, PROXY_PORT))
 	sock.close()
 
