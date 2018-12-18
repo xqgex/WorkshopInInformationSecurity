@@ -36,7 +36,7 @@ def main():
 	signal.signal(signal.SIGINT, signal_handler)
 	CONFIG = config() # Load configuration file
 	SERVER = WebSocketServer(CONFIG)
-	server_thread = Thread(target=SERVER.listen, args=[5])
+	server_thread = Thread(target=SERVER.listen)
 	server_thread.daemon = True
 	server_thread.start()
 	while SERVER.running:

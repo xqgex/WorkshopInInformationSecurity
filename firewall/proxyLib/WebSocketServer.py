@@ -17,7 +17,7 @@ class WebSocketServer(object):
 		self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 		self.socket.bind((self.proxy_ip, self.proxy_port))
 
-	def listen(self, backlog=5): # Listen for requests
+	def listen(self): # Listen for requests
 		print("Listening on {}".format(self.proxy_port))
 		while self.running:
 			print "\nwaiting to receive message"
@@ -25,12 +25,13 @@ class WebSocketServer(object):
 				data, address = self.socket.recvfrom(4096)
 			except socket.error, e:
 				print "Connection error"
-			print "received {} bytes from {}".format(len(data), address)
+				continue
+			print "Received {} bytes from {}".format(len(data), address)
 			if data:
 				if data == "Close_Connection":
 					self.running = False
-				elif data == "Check_Alive":
-					sent = self.socket.sendto("Pong", address)
+				elif data == "Ping":
+					self.socket.sendto("Pong", address)
 				else:
 					parsed_packet = self.parse_data(data)
 					if parsed_packet:
