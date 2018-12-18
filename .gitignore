@@ -1,4 +1,6 @@
 *.pyc
+*.c~
+*.h~
 
 # Prerequisites
 *.d
