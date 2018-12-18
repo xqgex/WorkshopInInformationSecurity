@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import ConfigParser, io, os, signal, socket, sys, time
+import ConfigParser, io, os, signal, sys, time
 from threading import Thread
 from proxyLib.WebSocketServer import WebSocketServer
 
@@ -28,7 +28,7 @@ class config(object):
 def signal_handler(signal, frame): # Add SIGINT handler for killing the threads
 	global SERVER
 	print(" Caught Ctrl+C, shutting down...")
-	SERVER.running = False
+	SERVER.setRunning(False)
 	sys.exit()
 
 def main():
@@ -39,7 +39,7 @@ def main():
 	server_thread = Thread(target=SERVER.listen)
 	server_thread.daemon = True
 	server_thread.start()
-	while SERVER.running:
+	while SERVER.getRunning():
 		time.sleep(10)
 	print "Proxy server terminated"
 

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 class DynamicTable(object):
-	def __init__(self, config):
+	def __init__(self):
 		self.table = []
 
 	def check_packet_struct(self, packet_struct):
@@ -15,9 +15,9 @@ class DynamicTable(object):
 		if not self.check_packet_struct(packet_struct):
 			return None
 		for recort in self.table:
-			if recort["src_ip"] == packet_struct["src_ip"] &&
-			   recort["src_port"] == packet_struct["src_port"] &&
-			   recort["dst_ip"] == packet_struct["dst_ip"] &&
+			if recort["src_ip"] == packet_struct["src_ip"] and \
+			   recort["src_port"] == packet_struct["src_port"] and \
+			   recort["dst_ip"] == packet_struct["dst_ip"] and \
 			   recort["dst_port"] == packet_struct["dst_port"]:
 				return recort
 		return None

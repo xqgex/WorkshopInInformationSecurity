@@ -4,7 +4,7 @@ import socket, time
 
 PROXY_IP = "127.1.2.0"
 PROXY_PORT = 7120
-BUFFER_SIZE = 4096s
+BUFFER_SIZE = 4096
 
 if __name__ == "__main__":
 	sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
