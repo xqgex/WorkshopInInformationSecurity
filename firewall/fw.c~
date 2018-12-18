@@ -43,7 +43,6 @@ static int active = 1;
 static int rules_counter = 0;
 static unsigned long log_counter = 0;
 static unsigned long conn_counter = 0;
-static unsigned long proxy_counter = 0;
 static rule_t* rules_array[MAX_RULES];
 static rule_t* rule_default;
 static struct class* sysfs_class = NULL;
@@ -52,7 +51,6 @@ static struct device* sysfs_device_rules = NULL;
 static struct device* sysfs_device_fw = NULL;
 static struct log_node* log_head = NULL;
 static struct conn_node* conn_table_head = NULL;
-static struct proxy_node* proxy_head = NULL;
 static struct nf_hook_ops nfho; // Main hook function
 static struct file_operations fops_rules = {
 	.owner = THIS_MODULE,
@@ -346,7 +344,7 @@ unsigned int hook_func(unsigned int hooknum,
 		}
 		// If protocol is TCP (ACK is off)
 		if ((ip_header->protocol == IPPROTO_TCP) && (action == NF_ACCEPT)) {
-			if (insert_first_conn_table = search_node_conn_table(ip_header->saddr, ip_header->daddr, src_port, dst_port, TODO_TODO_TODO) == 0) { // TODO TODO TODO - add state
+			if (insert_first_conn_table = search_node_conn_table(ip_header->saddr, ip_header->daddr, src_port, dst_port, TODO_TODO_TODO) == 0) { // TODO TODO TODO
 				printk("hook_func failed to insert new record into the dynamic rules table\n");
 			}
 		}
@@ -655,62 +653,6 @@ int insert_first_conn_table(__be32 src_ip, __be32 dst_ip, __be16 src_port, __be1
 	link->prev = NULL;
 	conn_counter++;
 	return 1;		
-}
-
-void change_packet(packet_row_t* packet,__u8 tos, __u16 tot_len, __u16 id, __u16 frag_off, __u8 ttl, __u8 protocol, __u16 check,	__u32 saddr, __u32 daddr) {
-	packet->tos = tos;
-	packet->tot_len = tot_len;
-	packet->id = id;
-	packet->frag_off = frag_off;
-	packet->ttl = ttl;
-	packet->protocol = protocol;
-	packet->check = check;
-	packet->saddr = saddr;
-	packet->daddr = daddr;
-}
-
-struct proxy_node* search_proxy_packet(int seq) {
-	struct proxy_node* temp = proxy_head;
-	while (temp!=NULL) {
-		if (temp->seq == seq) {
-			return temp;
-		}
-	}
-	return temp;
-}
-
-void delete_all_proxy_table() {
-	struct proxy_node* temp = proxy_head;
-	while (temp!=NULL) {
-		kfree(temp->packet);
-		kree(temp);
-		temp = proxy_head->next;
-	}
-}
-
-int insert_proxy_table(__u8 tos, __u16 tot_len, __u16 id, __u16	frag_off, __u8 ttl, __u8 protocol, __u16 check,	__u32 saddr, __u32 daddr) {
-	struct proxy_node* temp = proxy_head;
-	while (temp != NULL) {
-		if (temp->deleted == 1) {
-			change_packet(temp->packet, tos, tot_len, id, frag_off, ttl, protocol, check, saddr, daddr);
-			temp->deleted = 0;
-			return 1;
-		}
-	}
-	struct proxy_node *link = (struct proxy_node*)kmalloc(sizeof(struct proxy_node), GFP_ATOMIC); // Create a link
-	log_row_t *new_packet = (packet_row_t*)kmalloc(sizeof(packet_row_t), GFP_ATOMIC);
-	if (!link || !new_packet) {
-		printk("insert_first_proxy kmalloc failed\n");
-		return 0;
-	}
-	change_packet(new_packet, tos, tot_len, id, frag_off, ttl, protocol, check, saddr, daddr);
-	link->packet = new_packet;
-	link->seq = proxy_counter++;
-	link->deleted = 0;
-	link->next = proxy_head; // Point it to old first node
-	proxy_head = link; // Point first to new first node
-	proxy_counter++;
-	return 1;
 }
 
 int insert_first(unsigned char protocol,

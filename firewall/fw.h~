@@ -98,23 +98,13 @@ typedef struct { // logging
 	struct list_head list;			// kernel's list structure
 } log_row_t;
 typedef struct { // conn_table
+	unsigned char	protocol;		// values from: prot_t
 	__be32		src_ip;			// if you use this struct in userspace, change the type to unsigned int
 	__be32		dst_ip;			// if you use this struct in userspace, change the type to unsigned int
 	__be16		src_port;		// if you use this struct in userspace, change the type to unsigned short
 	__be16		dst_port;		// if you use this struct in userspace, change the type to unsigned short
 	state_t		state;
 } conn_row_t;
-typedef struct { // proxy_packets_table
-	__u8 	tos
-	__u16 	tot_len
-	__u16 	id
-	__u16 	frag_off
-	__u8 	ttl
-	__u8 	protocol
-	__u16 	check
-	__u32 	saddr
-	__u32 	daddr
-} packet_row_t;
 struct log_node {
 	log_row_t* log;
 	struct log_node *next;
@@ -123,12 +113,6 @@ struct conn_node {
 	conn_row_t* conn;
 	struct conn_node *next;
 	struct conn_node *prev;
-};
-struct proxy_node {
-	packet_row_t* packet;
-	struct conn_node *next;
-	int seq;
-	int deleted;
 };
 
 #endif // _FW_H_
