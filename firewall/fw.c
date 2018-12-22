@@ -52,7 +52,6 @@ static struct device* sysfs_device_rules = NULL;
 static struct device* sysfs_device_fw = NULL;
 static struct log_node* log_head = NULL;
 static struct conn_node* conn_table_head = NULL;
-static struct proxy_node* proxy_head = NULL;
 static struct nf_hook_ops nfho; // Main hook function
 static struct file_operations fops_rules = {
 	.owner = THIS_MODULE,
@@ -266,7 +265,6 @@ unsigned int hook_func(unsigned int hooknum,
 	__u16 fin = 0; //fin flag in tcp
 	__u16 urg = 0; //urg flag in tcp
 	__u16 psh = 0; //psh flag in tcp
-	int check_dynamic = 0;
 	int res = 0;
 	int i = 0;
 	unsigned int action = NF_DROP;
@@ -278,10 +276,8 @@ unsigned int hook_func(unsigned int hooknum,
 		dst_port = tcp_header->dest;
 		if (tcp_header->ack == 0) {
 			ack = ACK_NO;
-			
 		} else {
 			ack = ACK_YES;
-			check_dynamic = 1;
 		}
 		fin = tcp_header->fin;
 		urg = tcp_header->urg;
@@ -295,29 +291,42 @@ unsigned int hook_func(unsigned int hooknum,
 		src_port = icmp_header->type;
 		dst_port = icmp_header->code;
 	}
+	//////////////////////////////////////////////////
 	if (active == 0) {
 		action = NF_ACCEPT;
 		reason = REASON_FW_INACTIVE;
-	} else if (check_dynamic == 1) { // Compare to the dynamic table
-		// Check at the dynamic table
-		// TODO Check at the dynamic table & also check timeout < 25 for 3-way handshae
-
-		searced_connection = search_node_conn_table(ip_header->saddr, ip_header->daddr, src_port, dst_port);
-		if (searced_connection == NULL) {
-//			reason = ???; // TODO TODO TODO
-			return NF_DROP;
-		} else {
-		
-		}
-
-	/*struct conn_node* search_node_conn_table(unsigned char, __be32, __be32, __be16, __be16);*/
-	/*void delete_node_conn_table(struct conn_node *);*/
-
-		reason = REASON_NO_MATCHING_RULE; // TODO XXX
-		action = NF_ACCEPT; // TODO XXX
-		//
-		if (action == NF_ACCEPT) {
-			// TODO Update dynamic table
+	} else if () { // TODO If src ip and port are from the proxy
+		// TODO Search the packet in the connection table based on the packet DST
+		// TODO Edit packet & Send to the original destination
+		// TODO Edit the flags to the original flags according to the connection table
+		action = NF_ACCEPT
+		reason = REASON_ACCEPTED_BY_PROXY // TODO Add REASON_ACCEPTED_BY_PROXY 
+	} else if () { // TODO src and dst in the connection table
+		if () { // TODO Connection state is 'data' and packet flags match 'data' state flags
+			if () { // TODO If (source/dest port is 80) or (source port is 20)
+				// TODO Save the flags in the connection table
+				// TODO Edit packet so it will be Sent to the proxy
+				reason = REASON_SENT_TO_PROXY // TODO Add REASON_SENT_TO_PROXY
+			} else {
+				reason = REASON_HANDSHAKE_MATCH // TODO Add REASON_HANDSHAKE_MATCH
+			}
+			action = NF_ACCEPT
+		} else { // Start connection or close connection
+			if () { // TODO If timeout
+				// TODO Delete the record
+				action = NF_DROP
+				reason = REASON_HANDSHAKE_TIMEOUT // TODO Add REASON_HANDSHAKE_TIMEOUT
+			} else if () {// TODO If packet flag match the next state at the connection table
+				// TODO Update connection table state to be the next state
+				if () { // TODO If Handshake completed and the server port is 21
+					// TODO Add a new row to the connection table with server port 20
+				}
+				action = NF_ACCEPT
+				reason = REASON_HANDSHAKE_MATCH // TODO Add REASON_HANDSHAKE_MATCH
+			} else {
+				action = NF_DROP
+				reason = REASON_HANDSHAKE_FAILED // TODO Add REASON_HANDSHAKE_FAILED
+			}
 		}
 	} else { // Compare to the static table
 		// Default rule
@@ -344,12 +353,16 @@ unsigned int hook_func(unsigned int hooknum,
 				action = NF_ACCEPT;
 			}
 		}
-		// If protocol is TCP (ACK is off)
-		if ((ip_header->protocol == IPPROTO_TCP) && (action == NF_ACCEPT)) {
-			if (insert_first_conn_table = search_node_conn_table(ip_header->saddr, ip_header->daddr, src_port, dst_port, TODO_TODO_TODO) == 0) { // TODO TODO TODO - add state
-				printk("hook_func failed to insert new record into the dynamic rules table\n");
-			}
+		if () { // TODO If (action == NF_ACCEPT) and (TCP and packet flags are match 'STATE_START_1' flags)
+			// TODO Create new record at the connection table
 		}
+		//
+//	XXX	// If protocol is TCP (ACK is off)
+//	XXX	if ((ip_header->protocol == IPPROTO_TCP) && (action == NF_ACCEPT)) {
+//	XXX		if (insert_first_conn_table = search_node_conn_table(ip_header->saddr, ip_header->daddr, src_port, dst_port, TODO_TODO_TODO) == 0) { // TODO TODO TODO - add state
+//	XXX			printk("hook_func failed to insert new record into the dynamic rules table\n");
+//	XXX		}
+//	XXX	}
 	}
 	if (write_to_log(hooknum, reason, ip_header, src_port, dst_port, action) == 0) {
 		printk("hook_func write_to_log failed\n");
@@ -627,6 +640,12 @@ struct conn_node* search_node_conn_table(__be32 src_ip, __be32 dst_ip, __be16 sr
 		tmp->conn->dst_port == dst_port) {
 			return tmp;
 		}
+		else if (tmp->conn->dst_ip == src_ip &&
+		tmp->conn->src_ip == dst_ip &&
+		tmp->conn->dst_port == src_port &&
+		tmp->conn->src_port == dst_port) {
+			return tmp;
+		}
 		tmp = tmp->next;
 	}
 	return tmp;
@@ -655,62 +674,6 @@ int insert_first_conn_table(__be32 src_ip, __be32 dst_ip, __be16 src_port, __be1
 	link->prev = NULL;
 	conn_counter++;
 	return 1;		
-}
-
-void change_packet(packet_row_t* packet,__u8 tos, __u16 tot_len, __u16 id, __u16 frag_off, __u8 ttl, __u8 protocol, __u16 check,	__u32 saddr, __u32 daddr) {
-	packet->tos = tos;
-	packet->tot_len = tot_len;
-	packet->id = id;
-	packet->frag_off = frag_off;
-	packet->ttl = ttl;
-	packet->protocol = protocol;
-	packet->check = check;
-	packet->saddr = saddr;
-	packet->daddr = daddr;
-}
-
-struct proxy_node* search_proxy_packet(int seq) {
-	struct proxy_node* temp = proxy_head;
-	while (temp!=NULL) {
-		if (temp->seq == seq) {
-			return temp;
-		}
-	}
-	return temp;
-}
-
-void delete_all_proxy_table() {
-	struct proxy_node* temp = proxy_head;
-	while (temp!=NULL) {
-		kfree(temp->packet);
-		kree(temp);
-		temp = proxy_head->next;
-	}
-}
-
-int insert_proxy_table(__u8 tos, __u16 tot_len, __u16 id, __u16	frag_off, __u8 ttl, __u8 protocol, __u16 check,	__u32 saddr, __u32 daddr) {
-	struct proxy_node* temp = proxy_head;
-	while (temp != NULL) {
-		if (temp->deleted == 1) {
-			change_packet(temp->packet, tos, tot_len, id, frag_off, ttl, protocol, check, saddr, daddr);
-			temp->deleted = 0;
-			return 1;
-		}
-	}
-	struct proxy_node *link = (struct proxy_node*)kmalloc(sizeof(struct proxy_node), GFP_ATOMIC); // Create a link
-	log_row_t *new_packet = (packet_row_t*)kmalloc(sizeof(packet_row_t), GFP_ATOMIC);
-	if (!link || !new_packet) {
-		printk("insert_first_proxy kmalloc failed\n");
-		return 0;
-	}
-	change_packet(new_packet, tos, tot_len, id, frag_off, ttl, protocol, check, saddr, daddr);
-	link->packet = new_packet;
-	link->seq = proxy_counter++;
-	link->deleted = 0;
-	link->next = proxy_head; // Point it to old first node
-	proxy_head = link; // Point first to new first node
-	proxy_counter++;
-	return 1;
 }
 
 int insert_first(unsigned char protocol,

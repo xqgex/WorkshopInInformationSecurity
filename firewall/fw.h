@@ -34,9 +34,14 @@
 /****	typedef enum						****/
 /*******************************************************************/
 typedef enum {
-	HTTP_WAITING_FOR_SYN_ACK	= 1,
-	FTP_WAITING_FOR_SYN_ACK		= 10,
-	STATE_SYN_ACK_SENT		= 6,
+	STATE_START_1		= 1,
+	STATE_START_2		= 2,
+	STATE_START_3		= 3,
+	STATE_DATA		= 9,
+	STATE_CLOSE_1		=11,
+	STATE_CLOSE_2		=12,
+	STATE_CLOSE_3		=13,
+	STATE_CLOSE_4		=14,
 } state_t;
 typedef enum { // the protocols we will work with
 	PROT_ICMP	= 1,
@@ -104,17 +109,6 @@ typedef struct { // conn_table
 	__be16		dst_port;		// if you use this struct in userspace, change the type to unsigned short
 	state_t		state;
 } conn_row_t;
-typedef struct { // proxy_packets_table
-	__u8 	tos
-	__u16 	tot_len
-	__u16 	id
-	__u16 	frag_off
-	__u8 	ttl
-	__u8 	protocol
-	__u16 	check
-	__u32 	saddr
-	__u32 	daddr
-} packet_row_t;
 struct log_node {
 	log_row_t* log;
 	struct log_node *next;
@@ -123,12 +117,6 @@ struct conn_node {
 	conn_row_t* conn;
 	struct conn_node *next;
 	struct conn_node *prev;
-};
-struct proxy_node {
-	packet_row_t* packet;
-	struct conn_node *next;
-	int seq;
-	int deleted;
 };
 
 #endif // _FW_H_
