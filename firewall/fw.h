@@ -55,6 +55,11 @@ typedef enum { // various reasons to be registered in each log entry
 	REASON_NO_MATCHING_RULE	= -2,
 	REASON_XMAS_PACKET	= -4,
 	REASON_ILLEGAL_VALUE	= -6,
+	REASON_ACCEPTED_BY_PROXY= -7,
+	REASON_SENT_TO_PROXY	= -8,
+	REASON_HANDSHAKE_MATCH	= -9,
+	REASON_HANDSHAKE_TIMEOUT= -10,
+	REASON_HANDSHAKE_FAILED	= -11,
 } reason_t;
 typedef enum { // device minor numbers, for your convenience
 	MINOR_RULES	= 0,

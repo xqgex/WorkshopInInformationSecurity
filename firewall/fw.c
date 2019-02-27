@@ -295,37 +295,37 @@ unsigned int hook_func(unsigned int hooknum,
 	if (active == 0) {
 		action = NF_ACCEPT;
 		reason = REASON_FW_INACTIVE;
-	} else if () { // TODO If src ip and port are from the proxy
+	} else if () { // TODO If src ip (tcp_header->source) and port (src_port) are from the proxy
 		// TODO Search the packet in the connection table based on the packet DST
 		// TODO Edit packet & Send to the original destination
 		// TODO Edit the flags to the original flags according to the connection table
-		action = NF_ACCEPT
-		reason = REASON_ACCEPTED_BY_PROXY // TODO Add REASON_ACCEPTED_BY_PROXY 
+		action = NF_ACCEPT;
+		reason = REASON_ACCEPTED_BY_PROXY;
 	} else if () { // TODO src and dst in the connection table
 		if () { // TODO Connection state is 'data' and packet flags match 'data' state flags
 			if () { // TODO If (source/dest port is 80) or (source port is 20)
 				// TODO Save the flags in the connection table
 				// TODO Edit packet so it will be Sent to the proxy
-				reason = REASON_SENT_TO_PROXY // TODO Add REASON_SENT_TO_PROXY
+				reason = REASON_SENT_TO_PROXY;
 			} else {
-				reason = REASON_HANDSHAKE_MATCH // TODO Add REASON_HANDSHAKE_MATCH
+				reason = REASON_HANDSHAKE_MATCH;
 			}
-			action = NF_ACCEPT
+			action = NF_ACCEPT;
 		} else { // Start connection or close connection
 			if () { // TODO If timeout
 				// TODO Delete the record
-				action = NF_DROP
-				reason = REASON_HANDSHAKE_TIMEOUT // TODO Add REASON_HANDSHAKE_TIMEOUT
+				action = NF_DROP;
+				reason = REASON_HANDSHAKE_TIMEOUT;
 			} else if () {// TODO If packet flag match the next state at the connection table
 				// TODO Update connection table state to be the next state
 				if () { // TODO If Handshake completed and the server port is 21
 					// TODO Add a new row to the connection table with server port 20
 				}
-				action = NF_ACCEPT
-				reason = REASON_HANDSHAKE_MATCH // TODO Add REASON_HANDSHAKE_MATCH
+				action = NF_ACCEPT;
+				reason = REASON_HANDSHAKE_MATCH;
 			} else {
-				action = NF_DROP
-				reason = REASON_HANDSHAKE_FAILED // TODO Add REASON_HANDSHAKE_FAILED
+				action = NF_DROP;
+				reason = REASON_HANDSHAKE_FAILED;
 			}
 		}
 	} else { // Compare to the static table
