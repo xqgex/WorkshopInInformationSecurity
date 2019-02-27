@@ -26,8 +26,9 @@ static int __init my_module_init_function(void);
 static void __exit my_module_exit_function(void);
 int is_empty(void);
 struct conn_node* search_node_conn_table(__be32, __be32, __be16, __be16);
+struct conn_node* search_src_conn_table(__be32, __be16);
 void delete_node_conn_table(struct conn_node *);
-int insert_first_conn_table(__be32, __be32, __be16, __be16, state_t);
+int insert_first_conn_table(__be32, __be32, struct tcphdr *, state_t);
 int insert_first(unsigned char, unsigned char, unsigned char, __be32, __be32, __be16, __be16, reason_t);
 int delete_first(void);
 int write_to_log(unsigned int hooknum, reason_t reason, struct iphdr* ip_header, __be16 src_port, __be16 dst_port, unsigned int action);
@@ -261,7 +262,7 @@ unsigned int hook_func(unsigned int hooknum,
 	struct icmphdr* icmp_header;
 	struct udphdr* udp_header;
 	struct tcphdr* tcp_header;
-	struct conn_node* searced_connection;
+	struct conn_node* searched_connection;
 	__u16 fin = 0; //fin flag in tcp
 	__u16 urg = 0; //urg flag in tcp
 	__u16 psh = 0; //psh flag in tcp
@@ -269,9 +270,22 @@ unsigned int hook_func(unsigned int hooknum,
 	int i = 0;
 	unsigned int action = NF_DROP;
 	unsigned int found_match_rule = 0;
+	if (!skb) {
+		printk("skb is NULL\n");
+		return NF_DROP;
+	}
 	ip_header = (struct iphdr *)skb_network_header(skb);
+	if (!ip_header) {
+		printk("ip_header is NULL\n");
+		return NF_DROP;
+	}
 	if (ip_header->protocol == IPPROTO_TCP) { // Transmission Control Protocol, IPPROTO_TCP = 6
 		tcp_header = tcp_hdr(skb);
+		//tcp_header = (struct tcphdr *)(skb_transport_header(skb)+20); // TODO XXX This is from checksum.c
+		if (!tcp_header) {
+			printk("tcp_header is NULL\n");
+			return NF_DROP;
+		}
 		src_port = tcp_header->source;
 		dst_port = tcp_header->dest;
 		if (tcp_header->ack == 0) {
@@ -290,15 +304,45 @@ unsigned int hook_func(unsigned int hooknum,
 		icmp_header = icmp_hdr(skb);
 		src_port = icmp_header->type;
 		dst_port = icmp_header->code;
+	} else {
+		printk("Unknown protocol\n");
+		return NF_DROP;
 	}
 	//////////////////////////////////////////////////
 	if (active == 0) {
 		action = NF_ACCEPT;
 		reason = REASON_FW_INACTIVE;
-	} else if () { // TODO If src ip (tcp_header->source) and port (src_port) are from the proxy
-		// TODO Search the packet in the connection table based on the packet DST
-		// TODO Edit packet & Send to the original destination
-		// TODO Edit the flags to the original flags according to the connection table
+	} else if ((PROXY_IP == ip_header->saddr)&&(htons(PROXY_PORT) == src_port)) { // If src ip (ip_header->saddr) and port (src_port) are from the proxy
+		searched_connection = search_src_conn_table(ip_header->daddr, dst_port); // Search the packet in the connection table SRC based on the packet DST
+		if ((searched_connection == NULL) || (ip_header->protocol != IPPROTO_TCP)) {
+			printk("Got unknown packet from the proxy\n");
+			return NF_DROP;
+		}
+		// Restore the packet
+		ip_header->saddr = searched_connection->conn->src_ip;
+		src_port = searched_connection->conn->src_port;
+		tcp_header->source = src_port;
+		ip_header->daddr = searched_connection->conn->dst_ip;
+		dst_port = searched_connection->conn->dst_port;
+		tcp_header->dest = dst_port;
+		tcp_header->res1 = searched_connection->conn->res1;
+		tcp_header->doff = searched_connection->conn->doff;
+		tcp_header->fin = searched_connection->conn->fin;
+		tcp_header->syn = searched_connection->conn->syn;
+		tcp_header->rst = searched_connection->conn->rst;
+		tcp_header->psh = searched_connection->conn->psh;
+		tcp_header->ack = searched_connection->conn->ack;
+		tcp_header->urg = searched_connection->conn->urg;
+		tcp_header->ece = searched_connection->conn->ece;
+		tcp_header->cwr = searched_connection->conn->cwr;
+		// Calculate tcp_header&ip_header checksum
+		tcplen = (skb->len - ((ip_header->ihl )<< 2));
+		tcp_header->check = 0;
+		tcp_header->check = tcp_v4_check(tcplen, ip_header->saddr, ip_header->daddr,csum_partial((char*)tcp_header, tcplen,0));
+		skb->ip_summed = CHECKSUM_NONE; //stop offloading
+		ip_header->check = 0;
+		ip_header->check = ip_fast_csum((u8 *)ip_header, ip_header->ihl);
+		//
 		action = NF_ACCEPT;
 		reason = REASON_ACCEPTED_BY_PROXY;
 	} else if () { // TODO src and dst in the connection table
@@ -339,7 +383,7 @@ unsigned int hook_func(unsigned int hooknum,
 			reason = REASON_XMAS_PACKET;
 			action = NF_DROP;
 		} else { // Check rules
-			for (i=0; i<rules_counter; i++) {
+			for (i=0; i<rules_counter; ++i) {
 				res = check_matching_packet_rule(rules_array[i], ip_header, src_port, dst_port, ack);
 				if (res == 1) {
 					reason = i;
@@ -353,16 +397,13 @@ unsigned int hook_func(unsigned int hooknum,
 				action = NF_ACCEPT;
 			}
 		}
-		if () { // TODO If (action == NF_ACCEPT) and (TCP and packet flags are match 'STATE_START_1' flags)
-			// TODO Create new record at the connection table
+		if ((action == NF_ACCEPT) && (ip_header->protocol == IPPROTO_TCP) && (tcp_header->syn == 1) && (tcp_header->ack == 0)) {
+			// Create new record at the connection table
+			if (insert_first_conn_table(ip_header->saddr, ip_header->daddr, tcp_header, STATE_START_1) == 0) {
+				printk("hook_func failed to insert new record into the dynamic rules table\n");
+				return NF_DROP;
+			}
 		}
-		//
-//	XXX	// If protocol is TCP (ACK is off)
-//	XXX	if ((ip_header->protocol == IPPROTO_TCP) && (action == NF_ACCEPT)) {
-//	XXX		if (insert_first_conn_table = search_node_conn_table(ip_header->saddr, ip_header->daddr, src_port, dst_port, TODO_TODO_TODO) == 0) { // TODO TODO TODO - add state
-//	XXX			printk("hook_func failed to insert new record into the dynamic rules table\n");
-//	XXX		}
-//	XXX	}
 	}
 	if (write_to_log(hooknum, reason, ip_header, src_port, dst_port, action) == 0) {
 		printk("hook_func write_to_log failed\n");
@@ -373,7 +414,7 @@ unsigned int hook_func(unsigned int hooknum,
 
 void delete_rules_array(void) {
 	int i;
-	for (i=0; i<rules_counter; i++) {
+	for (i=0; i<rules_counter; ++i) {
 		if (rules_array[i] != NULL) {
 			kfree(rules_array[i]);
 		}
@@ -394,7 +435,7 @@ static ssize_t rules_read(struct file* filp, char* buffer, size_t length, loff_t
 	}
 	*msg = '\0';
 	*loop_rules = '\0';
-	for (i=0; i<rules_counter; i++) {
+	for (i=0; i<rules_counter; ++i) {
 		length_rule = sprintf(loop_rules, "%s %d %lu %d %lu %d %d %d %d %d %d\n",
 					rules_array[i]->rule_name,
 					(int)rules_array[i]->direction,
@@ -639,11 +680,21 @@ struct conn_node* search_node_conn_table(__be32 src_ip, __be32 dst_ip, __be16 sr
 		tmp->conn->src_port == src_port &&
 		tmp->conn->dst_port == dst_port) {
 			return tmp;
-		}
-		else if (tmp->conn->dst_ip == src_ip &&
+		} else if (tmp->conn->dst_ip == src_ip &&
 		tmp->conn->src_ip == dst_ip &&
 		tmp->conn->dst_port == src_port &&
 		tmp->conn->src_port == dst_port) {
+			return tmp;
+		}
+		tmp = tmp->next;
+	}
+	return tmp;
+}
+
+struct conn_node* search_src_conn_table(__be32 src_ip, __be16 src_port) {
+	struct conn_node * tmp = conn_table_head;
+	while (tmp != NULL) {
+		if (tmp->conn->src_ip == src_ip && tmp->conn->src_port == src_port) {
 			return tmp;
 		}
 		tmp = tmp->next;
@@ -657,7 +708,7 @@ void delete_node_conn_table(struct conn_node* link) {
 	kfree(link); 
 }
 
-int insert_first_conn_table(__be32 src_ip, __be32 dst_ip, __be16 src_port, __be16 dst_port, state_t state) {
+int insert_first_conn_table(__be32 src_ip, __be32 dst_ip, struct tcphdr* tcp_header, state_t state) {
 	struct conn_node *link = (struct conn_node*)kmalloc(sizeof(struct conn_node), GFP_ATOMIC); // Create a link
 	conn_row_t *new_conn = (conn_row_t*)kmalloc(sizeof(conn_row_t), GFP_ATOMIC);
 	if (!link || !new_conn) {
@@ -666,8 +717,18 @@ int insert_first_conn_table(__be32 src_ip, __be32 dst_ip, __be16 src_port, __be1
 	}
 	new_conn->src_ip = src_ip;
 	new_conn->dst_ip = dst_ip;
-	new_conn->src_port = src_port;
-	new_conn->dst_port = dst_port;
+	new_conn->src_port = tcp_header->source;
+	new_conn->dst_port = tcp_header->dest;
+	new_conn->res1 = tcp_header->res1;
+	new_conn->doff = tcp_header->doff;
+	new_conn->fin = tcp_header->fin;
+	new_conn->syn = tcp_header->syn;
+	new_conn->rst = tcp_header->rst;
+	new_conn->psh = tcp_header->psh;
+	new_conn->ack = tcp_header->ack;
+	new_conn->urg = tcp_header->urg;
+	new_conn->ece = tcp_header->ece;
+	new_conn->cwr = tcp_header->cwr;
 	new_conn->state = state;
 	link->conn = new_conn;
 	link->next = conn_table_head; // Point it to old first node
