@@ -391,22 +391,25 @@ unsigned int hook_func(unsigned int hooknum,
 				searched_connection->conn->state = state;
 				if ((searched_connection->conn->state == STATE_DATA) && (dst_port == 21)) { // If Handshake completed and the server port is 21
 					// Add a new row to the connection table with server port 20
+					if (insert_first_conn_table(ip_header->saddr, ip_header->daddr, 0, 20, tcp_header, STATE_START_1) == 0) {
 						printk("hook_func failed to insert new record with 20 dst_port into the dynamic connection table\n");
 						return NF_DROP;
 					}
 				}
-				else if(searched_connection->conn->state == STATE_CLOSE_1 && (dst_port == 21)) { // We insert to the fin 
-					searched_server = search_node_conn_table(ip_header->saddr, ip_header->daddr, 0, 20); 
-					if (searched_server != NULL) {
-						delete_node_conn_table(searched_server);
-					}
-					else {
-						printk("we didn't find the server record in the conn table\n");
-						return NF_DROP;
-					}
-				} else if ((searched_connection->conn->state == STATE_CLOSE_4)) { // If it is the final state, remove the record from the conn table
-					delete_node_conn_table(searched_connection);
+				action = NF_ACCEPT;
+				reason = REASON_HANDSHAKE_MATCH;
+			} else if(searched_connection->conn->state == STATE_CLOSE_1 && (dst_port == 21)) { // We insert to the fin 
+				searched_server = search_node_conn_table(ip_header->saddr, ip_header->daddr, 0, 20); 
+				if (searched_server != NULL) {
+					delete_node_conn_table(searched_server);
+				} else {
+					printk("we didn't find the server record in the conn table\n");
+					return NF_DROP;
 				}
+				action = NF_ACCEPT;
+				reason = REASON_HANDSHAKE_MATCH;
+			} else if ((searched_connection->conn->state == STATE_CLOSE_4)) { // If it is the final state, remove the record from the conn table
+				delete_node_conn_table(searched_connection);
 				action = NF_ACCEPT;
 				reason = REASON_HANDSHAKE_MATCH;
 			} else {
