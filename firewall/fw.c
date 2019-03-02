@@ -43,7 +43,6 @@ static int active = 1;
 static int rules_counter = 0;
 static unsigned long log_counter = 0;
 static unsigned long conn_counter = 0;
-static unsigned long proxy_counter = 0;
 static rule_t* rules_array[MAX_RULES];
 static rule_t* rule_default;
 static struct class* sysfs_class = NULL;
@@ -557,6 +556,9 @@ ssize_t log_clear_modify(struct device* dev, struct device_attribute* attr, cons
 	}
 	return count;
 }
+
+//MIN(conn_counter*47,4096)
+
 
 ssize_t conn_tab_display(struct device* dev, struct device_attribute* attr, char* buf) {
 	return scnprintf(buf, PAGE_SIZE, "%d", 0); // TODO conn_tab
