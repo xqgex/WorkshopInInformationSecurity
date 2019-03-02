@@ -43,7 +43,7 @@ int check_packet_match_next_state(struct tcphdr *, struct conn_node *);
 //**********************************************************
 static int major_number_rules = -1;
 static int major_number_log = -1;
-static int major_number_fw = -1;
+static int major_number_conn_tab = -1;
 static int active = 1;
 static int rules_counter = 0;
 static unsigned long log_counter = 0;
@@ -53,7 +53,8 @@ static rule_t* rule_default;
 static struct class* sysfs_class = NULL;
 static struct device* sysfs_device_log = NULL;
 static struct device* sysfs_device_rules = NULL;
-static struct device* sysfs_device_fw = NULL;
+static struct device* sysfs_device_conn_tab = NULL;
+//static struct device* sysfs_device_fw = NULL;
 static struct log_node* log_head = NULL;
 static struct conn_node* conn_table_head = NULL;
 static struct nf_hook_ops nfho; // Main hook function
@@ -721,8 +722,8 @@ static int __init my_module_init_function(void) {
 	if (IS_ERR(sysfs_device_rules)) {
 		return destroy(4);
 	}
-	sysfs_device_fw = device_create(sysfs_class, NULL, MKDEV(major_number_fw, 0), NULL, CLASS_NAME "_" DEVICE_NAME_FW);
-	if (IS_ERR(sysfs_device_fw)) {
+	sysfs_device_conn_tab = device_create(sysfs_class, NULL, MKDEV(major_number_conn_tab, 0), NULL, NULL);
+	if (IS_ERR(sysfs_device_conn_tab)) {
 		return destroy(5);
 	}
 	// Create sysfs file attributes	
@@ -738,7 +739,7 @@ static int __init my_module_init_function(void) {
 	if (device_create_file(sysfs_device_log, (const struct device_attribute *)&dev_attr_log_clear.attr)) {
 		return destroy(9);
 	}
-	if (device_create_file(sysfs_device_fw, (const struct device_attribute *)&dev_attr_conn_tab.attr)) {
+	if (device_create_file(sysfs_device_conn_tab, (const struct device_attribute *)&dev_attr_conn_tab.attr)) {
 		return destroy(10);
 	}
 	rule_default = (rule_t*)kmalloc(sizeof(rule_t), GFP_ATOMIC);
@@ -913,8 +914,8 @@ int destroy(int stage) {
 	if (10 <= stage) {device_remove_file(sysfs_device_rules,	(const struct device_attribute *)&dev_attr_rules_size.attr);}
 	if (9 <= stage) {device_remove_file(sysfs_device_log,	(const struct device_attribute *)&dev_attr_log_size.attr);}
 	if (8 <= stage) {device_remove_file(sysfs_device_log,	(const struct device_attribute *)&dev_attr_log_clear.attr);}
-	if (7 <= stage) {device_remove_file(sysfs_device_fw,	(const struct device_attribute *)&dev_attr_conn_tab.attr);}
-	if (6 <= stage) {device_destroy(sysfs_class, MKDEV(major_number_fw, 0));}
+	if (7 <= stage) {device_remove_file(sysfs_device_conn_tab,	(const struct device_attribute *)&dev_attr_conn_tab.attr);}
+	if (6 <= stage) {device_destroy(sysfs_class, MKDEV(major_number_conn_tab, 0));}
 	if (5 <= stage) {device_destroy(sysfs_class, MKDEV(major_number_rules, 0));}
 	if (4 <= stage) {device_destroy(sysfs_class, MKDEV(major_number_log, 0));}
 	if (3 <= stage) {class_destroy(sysfs_class);}

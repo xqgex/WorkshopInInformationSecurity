@@ -25,7 +25,7 @@
 #define FILE_LOG		"/dev/fw_log"
 #define FILE_LOG_SIZE		"/sys/class/fw/fw_log/log_size"
 #define FILE_LOG_CLEAR		"/sys/class/fw/fw_log/log_clear"
-#define FILE_CONN_TABLE		"/sys/class/fw/conn_tab"
+#define FILE_CONN_TABLE		"/sys/class/fw/conn_tab/conn_tab"
 
 long str2long(char* input) {
 	char *ptr;
