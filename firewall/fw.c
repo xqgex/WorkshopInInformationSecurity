@@ -264,7 +264,7 @@ unsigned int hook_func(unsigned int hooknum,
 	__be16 dst_port = 0;
 	struct icmphdr* icmp_header;
 	struct udphdr* udp_header;
-	struct tcphdr* tcp_header;
+	struct tcphdr* tcp_header = NULL;
 	struct conn_node* searched_connection;
 	struct conn_node* searched_server;
 	__u16 fin = 0; //fin flag in tcp
@@ -277,6 +277,7 @@ unsigned int hook_func(unsigned int hooknum,
 	state_t state = -1;
 	int tcplen = 0;
 	int i = 0;
+	int res = 0;
 	if (!skb) {
 		printk("skb is NULL\n");
 		return NF_DROP;
@@ -322,7 +323,7 @@ unsigned int hook_func(unsigned int hooknum,
 		action = NF_ACCEPT;
 		reason = REASON_FW_INACTIVE;
 	//Packet from proxy!
-	} else if ((PROXY_IP == ip_header->saddr)&&(htons(PROXY_PORT) == src_port)) { // If src ip (ip_header->saddr) and port (src_port) are from the proxy
+	} else if ((tcp_header != NULL) && (PROXY_IP == ip_header->saddr)&&(htons(PROXY_PORT) == src_port)) { // If src ip (ip_header->saddr) and port (src_port) are from the proxy
 		searched_connection = search_src_conn_table(ip_header->daddr, dst_port); // Search the packet in the connection table SRC based on the packet DST
 		if ((searched_connection == NULL) || (ip_header->protocol != IPPROTO_TCP)) {
 			printk("Got unknown packet from the proxy\n");
@@ -356,7 +357,7 @@ unsigned int hook_func(unsigned int hooknum,
 		action = NF_ACCEPT;
 		reason = REASON_ACCEPTED_BY_PROXY;
 	//Some packet, need to transfer it to the proxy.
-	} else if ((searched_connection = search_node_conn_table(ip_header->saddr, ip_header->daddr, src_port, dst_port)) != NULL) { // search the packet in the connection table. src and dst in the connection table. If it is different null, it is found 
+	} else if ((tcp_header != NULL) && ((searched_connection = search_node_conn_table(ip_header->saddr, ip_header->daddr, src_port, dst_port)) != NULL)) { // search the packet in the connection table. src and dst in the connection table. If it is different null, it is found 
 		if (searched_connection->conn->state == STATE_DATA) { // Connection state is 'data' and packet flags match 'data' state flags
 			if ((src_port == 80 || dst_port == 80) || src_port == 20) { // If (source/dest port is 80) or (source port is 20)
 				// Save the flags in the connection table
