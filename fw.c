@@ -33,8 +33,8 @@ int insert_first(unsigned char, unsigned char, unsigned char, __be32, __be32, __
 int delete_first(void);
 int write_to_log(unsigned int hooknum, reason_t reason, struct iphdr* ip_header, __be16 src_port, __be16 dst_port, unsigned int action);
 int destroy(int);
-void update_flags(struct conn_node*)
-int check_packet_match_next_state(struct tcphdr*, struct conn_node*)
+void update_flags(struct conn_node*);
+int check_packet_match_next_state(struct tcphdr*, struct conn_node*);
 
 
 
