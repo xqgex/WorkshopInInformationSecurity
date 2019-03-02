@@ -18,6 +18,7 @@
 
 #define MAX_RULES_LENGTH		90
 #define MAX_LOG_LENGTH			200
+#define MAX_CONN_LENGTH			200
 #define DEVICE_NAME_RULES		"rules"
 #define DEVICE_NAME_LOG			"log"
 #define DEVICE_NAME_CONN_TAB		"conn_tab"
