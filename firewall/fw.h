@@ -14,6 +14,7 @@
 #include <linux/icmp.h>
 #include <linux/uaccess.h>
 #include <linux/time.h>
+#include <net/tcp.h>
 
 #define MAX_RULES_LENGTH		90
 #define MAX_LOG_LENGTH			200
