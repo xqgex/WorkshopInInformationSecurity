@@ -24,7 +24,7 @@ class ClientThread(threading.Thread):
 				elif self.data == "Ping":
 					sock.sendto("Pong", self.address)
 			else:
-				server_port = check_sysfs(self.address)
+				server_port = int(self.address[1])
 				if server_port == 20: # FTP
 					if self.check_ftp(data):
 						sock.sendto(data, self.address)
@@ -32,24 +32,6 @@ class ClientThread(threading.Thread):
 					if self.check_http(data):
 						sock.sendto(data, self.address)
 			sock.close()
-	def check_sysfs(self, client_address):
-		if not os.path.isfile(self.config.get("kernel", "sysfs_path")):
-			print "sysfs {} does not exist.".format(self.config.get("kernel", "sysfs_path"))
-			return 0
-		if client_address[1] in [20, 21, 80]:
-			print "Address {} belong to server and not client as expected.".format(client_address)
-			return 0
-		with open(self.config.get("kernel", "sysfs_path"), "r") as infile:
-			kernel_connection_table = infile.readlines()
-		for row in kernel_connection_table:
-			cells = row.split("\t")
-			if len(cells) == 4:
-				if (cells[0] == client_address[0]) and (cells[1] == client_address[1]):
-					return int(cells[3])
-				elif (cells[2] == client_address[0]) and (cells[3] == client_address[1]):
-					return int(cells[1])
-		print "Client address does not exist inside the kernel connection table."
-		return 0
 	def check_http(self, data):
 		split_pos = data.find("\r\n\r\n")
 		if split_pos < 0:
