@@ -25,7 +25,7 @@ unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb, const struct n
 		tcp_header->check = tcp_v4_check(tcplen, ip_header->saddr, ip_header->daddr,csum_partial((char*)tcp_header, tcplen,0));
 		skb->ip_summed = CHECKSUM_NONE; //stop offloading
 		ip_header->check = 0;
-ip_header->check = ip_fast_csum((u8 *)ip_header, ip_header->ihl);
+		ip_header->check = ip_fast_csum((u8 *)ip_header, ip_header->ihl);
 		return NF_ACCEPT;
 	} else {
 		return NF_ACCEPT;
