@@ -448,6 +448,7 @@ unsigned int hook_func(unsigned int hooknum,
 				action = NF_ACCEPT;
 			}
 		}
+		//if ((action == NF_ACCEPT) && (ip_header->protocol == IPPROTO_TCP)) {
 		if ((action == NF_ACCEPT) && (ip_header->protocol == IPPROTO_TCP) && (tcp_header->syn == 1) && (tcp_header->ack == 0)) {
 			// Create new record at the connection table
 			if (insert_first_conn_table(ip_header->saddr, ip_header->daddr, src_port, dst_port ,tcp_header, STATE_START_1) == 0) {
@@ -922,7 +923,7 @@ int insert_first_conn_table(__be32 src_ip, __be32 dst_ip, __be16 src_port, __be1
 	struct conn_node *link = (struct conn_node*)kmalloc(sizeof(struct conn_node), GFP_ATOMIC); // Create a link
 	conn_row_t *new_conn = (conn_row_t*)kmalloc(sizeof(conn_row_t), GFP_ATOMIC);
 	struct timespec ts;
-	if (!link || !new_conn) {
+	if (!link || !new_conn || !tcp_header) {
 		printk("insert_first_conn_table kmalloc failed\n");
 		return 0;
 	}
@@ -946,6 +947,7 @@ int insert_first_conn_table(__be32 src_ip, __be32 dst_ip, __be16 src_port, __be1
 	link->conn = new_conn;
 	link->next = conn_tab_head; // Point it to old first node
 	link->prev = NULL;
+	conn_tab_head = link;
 	conn_counter++;
 	return 1;
 }

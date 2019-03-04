@@ -117,7 +117,7 @@ typedef struct { // conn_table
 	__be16			dst_port;		// if you use this struct in userspace, change the type to unsigned short
 	__u16			res1:4, doff:4, fin:1, syn:1, rst:1, psh:1, ack:1, urg:1, ece:1, cwr:1;
 	state_t			state;
-	unsigned long 	timestamp
+	unsigned long 		timestamp
 } conn_row_t;
 struct log_node {
 	log_row_t* log;
