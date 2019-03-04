@@ -16,6 +16,17 @@
 #include <linux/time.h>
 #include <net/tcp.h>
 
+#define TH_FIN				0x01
+#define TH_SYN				0x02
+#define TH_RST				0x04
+#define TH_PUSH				0x08
+#define TH_ACK				0x10
+#define TH_URG				0x20
+#define TH_ECE				0x40
+#define TH_CWR				0x80
+#define TH_NS				0x100
+#define TH_RS				0xE00
+
 #define MAX_RULES_LENGTH		90
 #define MAX_LOG_LENGTH			200
 #define MAX_CONN_LENGTH			200
@@ -115,7 +126,7 @@ typedef struct { // conn_table
 	__be32			dst_ip;			// if you use this struct in userspace, change the type to unsigned int
 	__be16			src_port;		// if you use this struct in userspace, change the type to unsigned short
 	__be16			dst_port;		// if you use this struct in userspace, change the type to unsigned short
-	__u16			res1:4, doff:4, fin:1, syn:1, rst:1, psh:1, ack:1, urg:1, ece:1, cwr:1;
+	char			th_flag;
 	state_t			state;
 	unsigned long 		timestamp
 } conn_row_t;
