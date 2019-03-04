@@ -272,9 +272,6 @@ unsigned int hook_func(unsigned int hooknum,
 	struct tcphdr* tcp_header = NULL;
 	struct conn_node* searched_connection;
 	struct conn_node* searched_server;
-	__u16 fin = 0; //fin flag in tcp
-	__u16 urg = 0; //urg flag in tcp
-	__u16 psh = 0; //psh flag in tcp
 	unsigned int action = NF_DROP;
 	unsigned int found_match_rule = 0;
 	unsigned long timenow = 0;
@@ -301,14 +298,11 @@ unsigned int hook_func(unsigned int hooknum,
 		}
 		src_port = tcp_header->source;
 		dst_port = tcp_header->dest;
-		if (tcp_header->ack == 0) {
-			ack = ACK_NO;
-		} else {
+		if (tcp_header->ack) {
 			ack = ACK_YES;
+		} else {
+			ack = ACK_NO;
 		}
-		fin = tcp_header->fin;
-		urg = tcp_header->urg;
-		psh = tcp_header->psh;
 	} else if (ip_header->protocol == IPPROTO_UDP) { // User Datagram Protocol, IPPROTO_UDP = 17
 		udp_header = udp_hdr(skb);
 		src_port = udp_header->source;
@@ -430,7 +424,7 @@ unsigned int hook_func(unsigned int hooknum,
 			return NF_ACCEPT;
 		}
 		// XMAS check
-		if (fin == 1 && urg == 1 && psh == 1) {
+		if ((tcp_header != NULL) && (tcp_header->fin) && (tcp_header->urg) && (tcp_header->psh)) {
 			reason = REASON_XMAS_PACKET;
 			action = NF_ACCEPT;
 		} else { // Check rules
@@ -448,8 +442,8 @@ unsigned int hook_func(unsigned int hooknum,
 				action = NF_ACCEPT;
 			}
 		}
-		//if ((action == NF_ACCEPT) && (ip_header->protocol == IPPROTO_TCP)) {
-		if ((action == NF_ACCEPT) && (ip_header->protocol == IPPROTO_TCP) && (tcp_header->syn == 1) && (tcp_header->ack == 0)) {
+		if ((action == NF_ACCEPT) && (ip_header->protocol == IPPROTO_TCP)) {
+		//if ((action == NF_ACCEPT) && (ip_header->protocol == IPPROTO_TCP) && (tcp_header->syn) && !(tcp_header->ack)) {
 			// Create new record at the connection table
 			if (insert_first_conn_table(ip_header->saddr, ip_header->daddr, src_port, dst_port ,tcp_header, STATE_START_1) == 0) {
 				printk("hook_func failed to insert new record into the dynamic connection table\n");
