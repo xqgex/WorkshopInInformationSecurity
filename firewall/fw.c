@@ -89,8 +89,8 @@ void init_default_rule(void) {
 	rule_default->dst_ip = 16777343; // 127.0.0.1
 	rule_default->dst_prefix_mask = 255; // 255.0.0.0
 	rule_default->dst_prefix_size = 8;
-	rule_default->src_port = PORT_ANY;
-	rule_default->dst_port = PORT_ANY;
+	rule_default->src_port = ntohs(PORT_ANY);
+	rule_default->dst_port = ntohs(PORT_ANY);
 	rule_default->protocol = PROT_ANY;
 	rule_default->ack = ACK_ANY;
 	rule_default->action = NF_ACCEPT;
@@ -108,9 +108,9 @@ int check_matching_packet_rule(rule_t* rule, struct iphdr* ip_header, __be16 src
 		return 0;
 	} // if it isn't tcp, the ack is ack_any but it dosen't matter.
 	//check port
-	if (rule->src_port == PORT_ANY) {
+	if (htons(rule->src_port) == PORT_ANY) {
 		found_port = 1;
-	} else if (rule->src_port == PORT_ABOVE_1023 && (src_port > PORT_ABOVE_1023)) {
+	} else if (htons(rule->src_port) == PORT_ABOVE_1023 && (htons(src_port) > PORT_ABOVE_1023)) {
 		found_port = 1;
 	} else if (rule->src_port == src_port) {
 		found_port = 1;
@@ -119,9 +119,9 @@ int check_matching_packet_rule(rule_t* rule, struct iphdr* ip_header, __be16 src
 		return 0;
 	}
 	found_port = 0;
-	if (rule->dst_port == PORT_ANY) {
+	if (htons(rule->dst_port) == PORT_ANY) {
 		found_port = 1;
-	} else if (rule->dst_port == PORT_ABOVE_1023 && (dst_port > PORT_ABOVE_1023)) {
+	} else if (htons(rule->dst_port) == PORT_ABOVE_1023 && (htons(dst_port) > PORT_ABOVE_1023)) {
 		found_port = 1;
 	} else if (rule->dst_port == dst_port) {
 		found_port = 1;
@@ -220,13 +220,13 @@ rule_t* parse_rule_line(char* line) {
 	}
 	new_rule->protocol = protocol;
 	// src_port
-	if (src_port < PORT_ANY || src_port > PORT_ABOVE_1023) {
+	if (htons(src_port) < PORT_ANY || htons(src_port) > PORT_ABOVE_1023) {
 		kfree(new_rule);
 		return NULL;
 	}
 	new_rule->src_port = (__be16)src_port;
 	// dst_port
-	if (dst_port < PORT_ANY || dst_port > PORT_ABOVE_1023) {
+	if (htons(dst_port) < PORT_ANY || htons(dst_port) > PORT_ABOVE_1023) {
 		kfree(new_rule);
 		return NULL;
 	}
@@ -291,7 +291,6 @@ unsigned int hook_func(unsigned int hooknum,
 	}
 	if (ip_header->protocol == IPPROTO_TCP) { // Transmission Control Protocol, IPPROTO_TCP = 6
 		tcp_header = tcp_hdr(skb);
-		//tcp_header = (struct tcphdr *)(skb_transport_header(skb)+20); // TODO XXX This is from checksum.c
 		if (!tcp_header) {
 			printk("tcp_header is NULL\n");
 			return NF_DROP;
@@ -322,7 +321,7 @@ unsigned int hook_func(unsigned int hooknum,
 		action = NF_ACCEPT;
 		reason = REASON_FW_INACTIVE;
 	//Packet from proxy!
-	} else if ((tcp_header != NULL) && (PROXY_IP == ip_header->saddr)&&(htons(PROXY_PORT) == src_port)) { // If src ip (ip_header->saddr) and port (src_port) are from the proxy
+	} else if ((tcp_header != NULL) && (PROXY_IP == ip_header->saddr)&&(PROXY_PORT == htons(src_port))) { // If src ip (ip_header->saddr) and port (src_port) are from the proxy
 		searched_connection = search_src_conn_table(ip_header->daddr, dst_port); // Search the packet in the connection table SRC based on the packet DST
 		if ((searched_connection == NULL) || (ip_header->protocol != IPPROTO_TCP)) {
 			printk("Got unknown packet from the proxy\n");
@@ -358,7 +357,7 @@ unsigned int hook_func(unsigned int hooknum,
 	//Some packet, need to transfer it to the proxy.
 	} else if ((tcp_header != NULL) && ((searched_connection = search_node_conn_table(ip_header->saddr, ip_header->daddr, src_port, dst_port)) != NULL)) { // search the packet in the connection table. src and dst in the connection table. If it is different null, it is found 
 		if (searched_connection->conn->state == STATE_DATA) { // Connection state is 'data' and packet flags match 'data' state flags
-			if ((src_port == 80 || dst_port == 80) || src_port == 20) { // If (source/dest port is 80) or (source port is 20)
+			if ((htons(src_port) == 80 || htons(dst_port) == 80) || htons(src_port) == 20) { // If (source/dest port is 80) or (source port is 20)
 				// Save the flags in the connection table
 				update_flags(tcp_header, searched_connection);
 				// Edit packet so it will be Sent to the proxy
@@ -389,27 +388,27 @@ unsigned int hook_func(unsigned int hooknum,
 			} else if ((state = check_packet_match_next_state(tcp_header, searched_connection)) != -1) {// If packet flag match the next state at the connection table
 				// Update connection table state to be the next state
 				searched_connection->conn->state = state;
-				if ((searched_connection->conn->state == STATE_DATA) && (dst_port == 21)) { // If Handshake completed and the server port is 21
-					// Add a new row to the connection table with server port 20
-					if (insert_first_conn_table(ip_header->saddr, ip_header->daddr, 0, 20, tcp_header, STATE_START_1) == 0) {
-						printk("hook_func failed to insert new record with 20 dst_port into the dynamic connection table\n");
-						return NF_DROP;
+				if ((searched_connection->conn->state == STATE_DATA) && (htons(dst_port) == 21)) { // If Handshake completed and the server port is 21
+					searched_server = search_node_conn_table(ip_header->saddr, ip_header->daddr, ntohs(0), ntohs(20));
+					if (searched_server == NULL) {
+						// Add a new row to the connection table with server port 20
+						if (insert_first_conn_table(ip_header->saddr, ip_header->daddr, ntohs(0), ntohs(20), tcp_header, STATE_START_1) == 0) {
+							printk("hook_func failed to insert new record with 20 dst_port into the dynamic connection table\n");
+							return NF_DROP;
+						}
+					}
+				} else if ((searched_connection->conn->state == STATE_CLOSE_4)) { // If it is the final state, remove the record from the conn table
+					delete_node_conn_table(searched_connection);
+					if (htons(dst_port) == 21) {
+						searched_server = search_node_conn_table(ip_header->saddr, ip_header->daddr, ntohs(0), ntohs(20)); 
+						if (searched_server != NULL) {
+							delete_node_conn_table(searched_server);
+						} else {
+							printk("we didn't find the server record in the conn table\n");
+							return NF_DROP;
+						}
 					}
 				}
-				action = NF_ACCEPT;
-				reason = REASON_HANDSHAKE_MATCH;
-			} else if(searched_connection->conn->state == STATE_CLOSE_1 && (dst_port == 21)) { // We insert to the fin 
-				searched_server = search_node_conn_table(ip_header->saddr, ip_header->daddr, 0, 20); 
-				if (searched_server != NULL) {
-					delete_node_conn_table(searched_server);
-				} else {
-					printk("we didn't find the server record in the conn table\n");
-					return NF_DROP;
-				}
-				action = NF_ACCEPT;
-				reason = REASON_HANDSHAKE_MATCH;
-			} else if ((searched_connection->conn->state == STATE_CLOSE_4)) { // If it is the final state, remove the record from the conn table
-				delete_node_conn_table(searched_connection);
 				action = NF_ACCEPT;
 				reason = REASON_HANDSHAKE_MATCH;
 			} else {
@@ -442,8 +441,7 @@ unsigned int hook_func(unsigned int hooknum,
 				action = NF_ACCEPT;
 			}
 		}
-		if ((action == NF_ACCEPT) && (ip_header->protocol == IPPROTO_TCP)) {
-		//if ((action == NF_ACCEPT) && (ip_header->protocol == IPPROTO_TCP) && (tcp_header->syn) && !(tcp_header->ack)) {
+		if ((action == NF_ACCEPT) && (ip_header->protocol == IPPROTO_TCP) && (tcp_header->syn) && !(tcp_header->ack)) {
 			// Create new record at the connection table
 			if (insert_first_conn_table(ip_header->saddr, ip_header->daddr, src_port, dst_port ,tcp_header, STATE_START_1) == 0) {
 				printk("hook_func failed to insert new record into the dynamic connection table\n");
@@ -619,8 +617,8 @@ static ssize_t log_read(struct file* filp, char* buffer, size_t length, loff_t* 
 					tmp->log->hooknum,
 					tmp->log->src_ip,
 					tmp->log->dst_ip,
-					tmp->log->src_port,
-					tmp->log->dst_port,
+					htons(tmp->log->src_port),
+					htons(tmp->log->dst_port),
 					(int)tmp->log->reason,
 					tmp->log->count);
 		if (length_log <= 0) {
@@ -692,12 +690,11 @@ static ssize_t conn_tab_read(struct file* filp, char* buffer, size_t length, lof
 	*loop_conn = '\0';
 	*msg = '\0';
 	while (tmp != NULL) {
-		printk("*******not null");
-		length_conn = sprintf(loop_conn, "src_ip: %d, src_port: %d, dst_ip: %d, dst_port: %d, protocol: TCP",
+		length_conn = sprintf(loop_conn, "src_ip: %d, src_port: %d, dst_ip: %d, dst_port: %d, protocol: TCP\n",
 					tmp->conn->src_ip,
-					tmp->conn->src_port,
+					htons(tmp->conn->src_port),
 					tmp->conn->dst_ip,
-					tmp->conn->dst_port);
+					htons(tmp->conn->dst_port));
 		if (length_conn <= 0) {
 			printk("conn_tab_read sprintf failed\n");
 			kfree(msg);
