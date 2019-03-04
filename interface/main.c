@@ -9,6 +9,7 @@
 #define PAGE_SIZE		4096
 #define RULES_STRUCT_SIZE	90
 #define LOG_STRUCT_SIZE		200
+#define CONN_TAB_STRUCT_SIZE	200
 
 #define ARGS_ACTIVATE		"activate"
 #define ARGS_DEACTIVATE		"deactivate"
@@ -25,7 +26,8 @@
 #define FILE_LOG		"/dev/fw_log"
 #define FILE_LOG_SIZE		"/sys/class/fw/fw_log/log_size"
 #define FILE_LOG_CLEAR		"/sys/class/fw/fw_log/log_clear"
-#define FILE_CONN_TABLE		"/sys/class/fw/conn_tab/conn_tab"
+#define FILE_CONN_TAB_SIZE	"/sys/class/fw/fw_conn_tab/conn_tab"
+#define FILE_CONN_TAB		"/dev/fw_conn_tab"
 
 long str2long(char* input) {
 	char *ptr;
@@ -578,13 +580,33 @@ int main(int argc, char **argv) {
 		} else if (strcmp(argv[1],ARGS_CLEAR_LOG)==0) {
 			return write_file(FILE_LOG_CLEAR, "c", 1, O_WRONLY, 1);
 		} else if (strcmp(argv[1],ARGS_SHOW_CONN_TABLE)==0) {
-			char* conn_table = malloc(PAGE_SIZE * sizeof(char));
-			if (read_file(FILE_CONN_TABLE, &conn_table, PAGE_SIZE, O_RDONLY, 1) == 1) {
-				free(conn_table);
+			char* size_str = malloc(PAGE_SIZE * sizeof(char));
+			if (!size_str) {
+				printf("malloc failed\n");
 				return 1;
 			}
-			printf("%s" , conn_table);
-			free(conn_table);
+			*size_str = '\0';
+			if (read_file(FILE_CONN_TAB_SIZE, &size_str, PAGE_SIZE, O_RDONLY, 1) == 1) {
+				free(size_str);
+				return 1;
+			}
+			long size_long = str2long(size_str);
+			free(size_str);
+			if (size_long <= 0) {
+				return 1;
+			}
+			char* conn_tab = malloc(size_long * CONN_TAB_STRUCT_SIZE * sizeof(char));
+			if (!conn_tab) {
+				printf("malloc failed\n");
+				return 1;
+			}
+			*conn_tab = '\0';
+			if (read_file(FILE_CONN_TAB, &conn_tab, size_long*CONN_TAB_STRUCT_SIZE, O_RDONLY, 0) == 1) {
+				free(conn_tab);
+				return 1;
+			}
+			printf("%s", conn_tab);
+			free(conn_tab);
 		} else {
 			printf("Invalid call\n");
 		}

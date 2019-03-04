@@ -22,6 +22,7 @@ ssize_t rules_size_display(struct device *, struct device_attribute *, char *);
 ssize_t log_size_display(struct device *, struct device_attribute *, char *);
 ssize_t log_clear_modify(struct device *, struct device_attribute *, const char *, size_t);
 ssize_t conn_tab_display(struct device *, struct device_attribute *, char *);
+static ssize_t conn_tab_read(struct file *, char *, size_t, loff_t *);
 static int __init my_module_init_function(void);
 static void __exit my_module_exit_function(void);
 int is_empty(void);
@@ -65,6 +66,10 @@ static struct file_operations fops_rules = {
 static struct file_operations fops_log = {
 	.owner = THIS_MODULE,
 	.read = log_read
+};
+static struct file_operations fops_conn_tab = {
+	.owner = THIS_MODULE,
+	.read = conn_tab_read
 };
 static DEVICE_ATTR(active,	S_IRWXU	| S_IRWXG | S_IRWXO, active_display,	active_modify);
 static DEVICE_ATTR(rules_size,	S_IRUSR | S_IRGRP | S_IROTH, rules_size_display,NULL);
@@ -427,7 +432,7 @@ unsigned int hook_func(unsigned int hooknum,
 		// XMAS check
 		if (fin == 1 && urg == 1 && psh == 1) {
 			reason = REASON_XMAS_PACKET;
-			action = NF_DROP;
+			action = NF_ACCEPT;
 		} else { // Check rules
 			for (i=0; i<rules_counter; ++i) {
 				res = check_matching_packet_rule(rules_array[i], ip_header, src_port, dst_port, ack);
@@ -686,43 +691,45 @@ ssize_t log_clear_modify(struct device* dev, struct device_attribute* attr, cons
 	return count;
 }
 
-ssize_t conn_tab_display(struct device* dev, struct device_attribute* attr, char* buf) {
-	int bytes_read = 0; // Number of bytes actually written to the buffer
+static ssize_t conn_tab_read(struct file* filp, char* buffer, size_t length, loff_t* offset) {
 	struct conn_node* tmp = conn_tab_head;
 	int length_conn = 0;
-	ssize_t res = 0;
-	char* msg = (char *)kmalloc(sizeof(char)*conn_counter*MAX_CONN_LENGTH, GFP_ATOMIC);
+	int bytes_read = 0; // Number of bytes actually written to the buffer
 	char* loop_conn = (char *)kmalloc(sizeof(char)*MAX_CONN_LENGTH, GFP_ATOMIC);
-	if (!msg || !loop_conn) {
-		printk("conn_tab_display_read kmalloc failed\n");
+	char* msg = (char *)kmalloc(sizeof(char)*conn_counter*MAX_CONN_LENGTH, GFP_ATOMIC);
+	if (!loop_conn || !msg) {
+		printk("conn_tab_read kmalloc failed\n");
 		return 0;
 	}
-	*msg = '\0';
 	*loop_conn = '\0';
+	*msg = '\0';
 	while (tmp != NULL) {
-		printk("conn_tab - try sprintf");
+		printk("*******not null");
 		length_conn = sprintf(loop_conn, "src_ip: %d, src_port: %d, dst_ip: %d, dst_port: %d, protocol: TCP",
 					tmp->conn->src_ip,
 					tmp->conn->src_port,
 					tmp->conn->dst_ip,
 					tmp->conn->dst_port);
 		if (length_conn <= 0) {
-			printk("conn_tab_display sprintf failed\n");
+			printk("conn_tab_read sprintf failed\n");
 			kfree(msg);
 			kfree(loop_conn);
 			return bytes_read;
 		}
-		printk("loop_conn: %s\n", loop_conn);
 		bytes_read += length_conn;
 		strncat(msg, loop_conn, length_conn);
 		tmp = tmp->next;
 	}
-	printk("msg: %s\n", msg);
-	res = scnprintf(buf, PAGE_SIZE, "%s", msg);
+	if (copy_to_user(buffer, msg, bytes_read) != 0) {
+		printk("conn_tab_read copy_to_user failed\n");
+	}
 	kfree(msg);
 	kfree(loop_conn);
-	return res;
-	//return scnprintf(buf, PAGE_SIZE, "%d", 0); // TODO conn_tab
+	return bytes_read;
+}
+
+ssize_t conn_tab_display(struct device* dev, struct device_attribute* attr, char* buf) {
+	return scnprintf(buf, PAGE_SIZE, "%ld", conn_counter);
 }
 
 static int __init my_module_init_function(void) {
@@ -740,11 +747,16 @@ static int __init my_module_init_function(void) {
 	if (major_number_log < 0) {
 		return -1;
 	}
+	major_number_conn_tab = register_chrdev(0, DEVICE_NAME_CONN_TAB, &fops_conn_tab);
+	if (major_number_log < 0) {
+		return -1;
+	}
 	// Create sysfs class
 	sysfs_class = class_create(THIS_MODULE, CLASS_NAME);
 	if (IS_ERR(sysfs_class)) {
 		unregister_chrdev(major_number_rules, DEVICE_NAME_RULES);
 		unregister_chrdev(major_number_log, DEVICE_NAME_LOG);
+		unregister_chrdev(major_number_conn_tab, DEVICE_NAME_CONN_TAB);
 		return -1;
 	}
 	// Create sysfs device
@@ -753,6 +765,7 @@ static int __init my_module_init_function(void) {
 		class_destroy(sysfs_class);
 		unregister_chrdev(major_number_rules, DEVICE_NAME_RULES);
 		unregister_chrdev(major_number_log, DEVICE_NAME_LOG);
+		unregister_chrdev(major_number_conn_tab, DEVICE_NAME_CONN_TAB);
 		return -1;
 	}
 	sysfs_device_log = device_create(sysfs_class, NULL, MKDEV(major_number_log, 0), NULL, CLASS_NAME "_" DEVICE_NAME_LOG);
@@ -760,13 +773,15 @@ static int __init my_module_init_function(void) {
 		class_destroy(sysfs_class);
 		unregister_chrdev(major_number_rules, DEVICE_NAME_RULES);
 		unregister_chrdev(major_number_log, DEVICE_NAME_LOG);
+		unregister_chrdev(major_number_conn_tab, DEVICE_NAME_CONN_TAB);
 		return -1;
 	}
-	sysfs_device_conn_tab = device_create(sysfs_class, NULL, MKDEV(major_number_conn_tab, 0), NULL, DEVICE_NAME_CONN_TAB);
+	sysfs_device_conn_tab = device_create(sysfs_class, NULL, MKDEV(major_number_conn_tab, 0), NULL, CLASS_NAME "_" DEVICE_NAME_CONN_TAB);
 	if (IS_ERR(sysfs_device_conn_tab)) {
 		class_destroy(sysfs_class);
 		unregister_chrdev(major_number_rules, DEVICE_NAME_RULES);
 		unregister_chrdev(major_number_log, DEVICE_NAME_LOG);
+		unregister_chrdev(major_number_conn_tab, DEVICE_NAME_CONN_TAB);
 		return -1;
 	}
 	// Create sysfs file attributes	
@@ -777,6 +792,7 @@ static int __init my_module_init_function(void) {
 		class_destroy(sysfs_class);
 		unregister_chrdev(major_number_rules, DEVICE_NAME_RULES);
 		unregister_chrdev(major_number_log, DEVICE_NAME_LOG);
+		unregister_chrdev(major_number_conn_tab, DEVICE_NAME_CONN_TAB);
 		return -1;
 	}
 	if (device_create_file(sysfs_device_rules, (const struct device_attribute *)&dev_attr_rules_size.attr)) {
@@ -787,6 +803,7 @@ static int __init my_module_init_function(void) {
 		class_destroy(sysfs_class);
 		unregister_chrdev(major_number_rules, DEVICE_NAME_RULES);
 		unregister_chrdev(major_number_log, DEVICE_NAME_LOG);
+		unregister_chrdev(major_number_conn_tab, DEVICE_NAME_CONN_TAB);
 		return -1;
 	}
 	if (device_create_file(sysfs_device_log, (const struct device_attribute *)&dev_attr_log_size.attr)) {
@@ -798,6 +815,7 @@ static int __init my_module_init_function(void) {
 		class_destroy(sysfs_class);
 		unregister_chrdev(major_number_rules, DEVICE_NAME_RULES);
 		unregister_chrdev(major_number_log, DEVICE_NAME_LOG);
+		unregister_chrdev(major_number_conn_tab, DEVICE_NAME_CONN_TAB);
 		return -1;
 	}
 	if (device_create_file(sysfs_device_log, (const struct device_attribute *)&dev_attr_log_clear.attr)) {
@@ -810,6 +828,7 @@ static int __init my_module_init_function(void) {
 		class_destroy(sysfs_class);
 		unregister_chrdev(major_number_rules, DEVICE_NAME_RULES);
 		unregister_chrdev(major_number_log, DEVICE_NAME_LOG);
+		unregister_chrdev(major_number_conn_tab, DEVICE_NAME_CONN_TAB);
 		return -1;
 	}
 	if (device_create_file(sysfs_device_conn_tab, (const struct device_attribute *)&dev_attr_conn_tab.attr)) {
@@ -823,6 +842,7 @@ static int __init my_module_init_function(void) {
 		class_destroy(sysfs_class);
 		unregister_chrdev(major_number_rules, DEVICE_NAME_RULES);
 		unregister_chrdev(major_number_log, DEVICE_NAME_LOG);
+		unregister_chrdev(major_number_conn_tab, DEVICE_NAME_CONN_TAB);
 		return -1;
 	}
 	rule_default = (rule_t*)kmalloc(sizeof(rule_t), GFP_ATOMIC);
@@ -847,6 +867,7 @@ static void __exit my_module_exit_function(void) {
 	class_destroy(sysfs_class);
 	unregister_chrdev(major_number_rules, DEVICE_NAME_RULES);
 	unregister_chrdev(major_number_log, DEVICE_NAME_LOG);
+	unregister_chrdev(major_number_conn_tab, DEVICE_NAME_CONN_TAB);
 }
 
 int is_empty(void) {
@@ -926,7 +947,7 @@ int insert_first_conn_table(__be32 src_ip, __be32 dst_ip, __be16 src_port, __be1
 	link->next = conn_tab_head; // Point it to old first node
 	link->prev = NULL;
 	conn_counter++;
-	return 1;		
+	return 1;
 }
 
 int insert_first(unsigned char protocol,
