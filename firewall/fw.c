@@ -946,6 +946,7 @@ int insert_first_conn_table(__be32 src_ip, __be32 dst_ip, __be16 src_port, __be1
 	link->conn = new_conn;
 	link->next = conn_tab_head; // Point it to old first node
 	link->prev = NULL;
+	conn_tab_head = link;
 	conn_counter++;
 	return 1;
 }
