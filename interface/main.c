@@ -287,9 +287,6 @@ int parse_to_human_format_rules(char* line, char** final_line){
 	int ignore_mask = 0;
 	char *end_str;
 	char* pch = strtok_r(line," ",&end_str);
-	long val;
-	unsigned int ip;
-	int prefix_size, port, direction, protocol, ack, action;
 	while (pch != NULL) {
 		switch (space_counter) {
 			case 0: // <rule_name>
@@ -403,15 +400,38 @@ int parse_to_human_format_rules(char* line, char** final_line){
 	return 0;
 }
 
+int parse_to_human_format_conn_tab(char* line, char** final_line){
+	int space_counter = 0;
+	int ignore_mask = 0;
+	char *end_str;
+	char* pch = strtok_r(line," ",&end_str);
+	while (pch != NULL) {
+		switch (space_counter) {
+			case 1: // <Src_IP>
+			case 5: // <Dest_IP>
+				pch[strlen(pch)-1] = '\0';
+				ignore_mask = int_to_ip(pch, final_line);
+				break;
+			default: 
+				if (asprintf(final_line, "%s %s", *final_line, pch) < 0) {
+					return 1;
+				}
+		}
+		pch = strtok_r(NULL, " ", &end_str);
+		space_counter++;
+	}
+	if (asprintf(final_line, "%s\n", *final_line) < 0) {
+		return 1;
+	}
+	return 0;
+}
+
 //timestamp: 1543590916, protocol: 6, action: 0, hooknum: 0, src_ip: 425639259, dst_ip: 251789322, src_port: 69, dst_port: 11264, reason: -4, count: 2
 int parse_to_human_format_log(char* line, char** final_line){
 	int space_counter = 0;
 	int ignore_mask = 0;
 	char *end_str;
 	char* pch = strtok_r(line," ",&end_str);
-	long val;
-	unsigned int ip;
-	int prefix_size, port, direction, protocol, ack, action;
 	while (pch != NULL) {
 		switch (space_counter) {
 			case 9: // <Src_IP>
@@ -565,18 +585,26 @@ int main(int argc, char **argv) {
 				return 1;
 			}
 			char* final_log = malloc(size_long * LOG_STRUCT_SIZE * sizeof(char));
+			if (!final_log) {
+				printf("malloc failed\n");
+				free(log);
+				return 1;
+			}
 			*final_log = '\0';
 			char* end_str;
 			char* pch = strtok_r(log,"\n",&end_str);
 			while (pch != NULL) {
 				if (parse_to_human_format_log(pch, &final_log) == 1){
 					printf("parsing error\n");
+					free(log);
+					free(final_log);
 					return 1;
 				}
 				pch = strtok_r(NULL, "\n", &end_str);
 			}
 			printf("%s", final_log);
 			free(log);
+			free(final_log);
 		} else if (strcmp(argv[1],ARGS_CLEAR_LOG)==0) {
 			return write_file(FILE_LOG_CLEAR, "c", 1, O_WRONLY, 1);
 		} else if (strcmp(argv[1],ARGS_SHOW_CONN_TABLE)==0) {
@@ -605,8 +633,27 @@ int main(int argc, char **argv) {
 				free(conn_tab);
 				return 1;
 			}
-			printf("%s", conn_tab);
+			char* final_conn_tab = malloc(size_long * CONN_TAB_STRUCT_SIZE * sizeof(char));
+			if (!final_conn_tab) {
+				printf("malloc failed\n");
+				free(conn_tab);
+				return 1;
+			}
+			*final_conn_tab = '\0';
+			char* end_str;
+			char* pch = strtok_r(conn_tab,"\n",&end_str);
+			while (pch != NULL) {
+				if (parse_to_human_format_conn_tab(pch, &final_conn_tab) == 1){
+					printf("parsing error\n");
+					free(conn_tab);
+					free(final_conn_tab);
+					return 1;
+				}
+				pch = strtok_r(NULL, "\n", &end_str);
+			}
+			printf("%s", final_conn_tab);
 			free(conn_tab);
+			free(final_conn_tab);
 		} else {
 			printf("Invalid call\n");
 		}
