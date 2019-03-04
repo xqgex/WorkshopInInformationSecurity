@@ -126,7 +126,7 @@ typedef struct { // conn_table
 	__be32			dst_ip;			// if you use this struct in userspace, change the type to unsigned int
 	__be16			src_port;		// if you use this struct in userspace, change the type to unsigned short
 	__be16			dst_port;		// if you use this struct in userspace, change the type to unsigned short
-	char			th_flag;
+	__u16			res1:4, doff:4, fin:1, syn:1, rst:1, psh:1, ack:1, urg:1, ece:1, cwr:1;
 	state_t			state;
 	unsigned long 		timestamp
 } conn_row_t;
