@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import os, re, socket, threading, urllib
+import ast, os, re, socket, threading, urllib
 from select import select
 
 MAGIC_SPLIT_CHAR = "_"
@@ -18,7 +18,7 @@ class ClientThread(threading.Thread):
 		print "parsing {} bytes from {}".format(len(self.data), self.address)
 		if self.data:
 			sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-			if (self.address[0] = self.config.get("connection", "kernel_ip")) and (self.address[1] = int(self.config.get("connection", "kernel_port"))):
+			if (self.address[0] == self.config.get("connection", "kernel_ip")) and (self.address[1] == int(self.config.get("connection", "kernel_port"))):
 				if self.data == "Close_Connection":
 					RUNNING = False
 				elif self.data == "Ping":
@@ -26,14 +26,14 @@ class ClientThread(threading.Thread):
 			else:
 				server_port = int(self.address[1])
 				if server_port == 20: # FTP
-					if self.check_ftp(data):
-						sock.sendto(data, self.address)
+					if self.check_ftp(self.data):
+						sock.sendto(self.data, self.address)
 				elif server_port == 25: # SMTP
-					if self.check_smtp(data):
-						sock.sendto(data, self.address)
+					if self.check_smtp(self.data):
+						sock.sendto(self.data, self.address)
 				elif server_port == 80: # HTTP
-					if self.check_http(data):
-						sock.sendto(data, self.address)
+					if self.check_http(self.data):
+						sock.sendto(self.data, self.address)
 			sock.close()
 	def check_ftp(self, data):
 		# Parse magic numbers # Based on https://asecuritysite.com/forensics/magic & https://www.garykessler.net/library/file_sigs.html
@@ -51,11 +51,11 @@ class ClientThread(threading.Thread):
 				loop_line = data[occurrence:]
 			# Find the file name
 			filename_pos = loop_line.find("filename")
-			if 0 < loop_crlf:
+			if 0 < filename_pos:
 				quotation_marks = [x.start() for x in re.finditer("\"", loop_line[filename_pos:])]
 				if 2 <= len(quotation_marks):
-					loop_filename = loop_line[filename_pos+quotation_marks[0]:filename_pos+quotation_marks[1]]
-					if loop_filename[:-2].lower() == ".c":
+					loop_filename = loop_line[filename_pos+quotation_marks[0]+1:filename_pos+quotation_marks[1]]
+					if loop_filename[-2:].lower() == ".c":
 						return False # File extension is '.c'
 		return True
 	def check_http(self, data):
@@ -85,15 +85,13 @@ class ClientThread(threading.Thread):
 			if ("/objects" in path_unquoted) and (".." in path_unquoted):
 				return False
 			# Check for c files
-			if header_list[1].split("/")[-1].split("?")[0][:-2].lower() == ".c":
+			if header_list[1].split("/")[-1].split("?")[0][-2:].lower() == ".c":
 				return False # File extension is '.c'
 		# The second test for c files
-		if self.config.get("dlp", "advanced_test"): # If the user has decided to enable the advanced test option
+		if self.config.get("dlp", "advanced_test") == "true": # If the user has decided to enable the advanced test option
 			content_type_pos = re.search("Content-Type:[ ]*([\/a-zA-Z]+)[\s\S]*?", data[:split_pos])
-			if not content_type_pos:
-				return False # The request dosn't have Content-Type field
-			if content_type_pos.group(1) == "text/plain": # If the file is a simple text file, check for C language saved words
-				for test_word in self.config.get("dlp", "vocabulary"):
+			if content_type_pos and content_type_pos.group(1) == "text/plain": # If the file is a simple text file, check for C language saved words
+				for test_word in ast.literal_eval(self.config.get("dlp", "vocabulary")):
 					if test_word in data[split_pos+4:]:
 						return False
 		return True
