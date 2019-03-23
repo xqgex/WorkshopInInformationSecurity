@@ -29,8 +29,10 @@ class ClientThread(threading.Thread):
 					if self.check_ftp(data):
 						sock.sendto(data, self.address)
 				elif server_port == 80: # HTTP
-					if self.check_http(data):
+					if self.check_http(data) and self.check_cgit_directory_traversal(data):
 						sock.sendto(data, self.address)
+#				elif self.check_c_file(data, self.address): # TODO TODO TODO
+#					sock.sendto(data, self.address) # TODO TODO TODO
 			sock.close()
 	def check_http(self, data):
 		split_pos = data.find("\r\n\r\n")
@@ -58,6 +60,18 @@ class ClientThread(threading.Thread):
 			return False
 		else:
 			return True
+	def check_cgit_directory_traversal(self, data): # CVE-2018-14912
+		# Avoid directory traversal by forbidding ".."
+		split_pos = data.find("\r\n\r\n")
+		if split_pos < 0:
+			return False
+		header_list = [x for x in data[:split_pos].split(" ") if len(x) > 0] # Split the header, ignore double spaces
+		header_list[1] = urllib.unquote(header_list[1]) # Convert '%2E' into '.'
+		if (header_list[0].lower() == "get") and ("/objects" in header_list[1]) and (".." in header_list[1]):
+			return False
+		return True
+#	def check_c_file(self, data): # TODO TODO TODO
+#		return True # TODO TODO TODO
 
 class WebSocketServer(object):
 	def __init__(self, config):
