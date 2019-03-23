@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import os, socket, threading
+import os, socket, threading, urllib
 from select import select
 
 MAGIC_SPLIT_CHAR = "_"
