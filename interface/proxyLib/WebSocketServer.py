@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import os, socket, threading, urllib
+import os, re, socket, threading, urllib
 from select import select
 
 MAGIC_SPLIT_CHAR = "_"
@@ -41,8 +41,23 @@ class ClientThread(threading.Thread):
 			return False
 		else:
 			return True
-	def check_smtp(self, data): # TODO TODO TODO
-		return True # TODO TODO TODO
+	def check_smtp(self, data):
+		occurrences = [x.start() for x in re.finditer("Content-Disposition: attachment", data)]
+		for occurrence in occurrences:
+			loop_crlf = data[occurrence:].find("\n")
+			if 0 < loop_crlf:
+				loop_line = data[occurrence:occurrence+loop_crlf]
+			else:
+				loop_line = data[occurrence:]
+			# Find the file name
+			filename_pos = loop_line.find("filename")
+			if 0 < loop_crlf:
+				quotation_marks = [x.start() for x in re.finditer("\"", loop_line[filename_pos:])]
+				if 2 <= len(quotation_marks):
+					loop_filename = loop_line[filename_pos+quotation_marks[0]:filename_pos+quotation_marks[1]]
+					if loop_filename[:-2].lower() == ".c":
+						return False # File extension is '.c'
+		return True
 	def check_http(self, data):
 		split_pos = data.find("\r\n\r\n")
 		if split_pos < 0:
@@ -72,14 +87,15 @@ class ClientThread(threading.Thread):
 			# Check for c files
 			if header_list[1].split("/")[-1].split("?")[0][:-2].lower() == ".c":
 				return False # File extension is '.c'
-			if self.config.get("dlp", "advanced_test"): # If the user has decided to enable the advanced test option
-				content_type_pos = re.search("Content-Type:[ ]*([\/a-zA-Z]+)[\s\S]*?", data[:split_pos])
-				if not content_type_pos:
-					return False # The request dosn't have Content-Type field
-				if content_type_pos.group(1) == "text/plain": # If the file is a simple text file, check for C language saved words
-					for test_word in self.config.get("dlp", "vocabulary"):
-						if test_word in data[split_pos+4:]:
-							return False
+		# The second test for c files
+		if self.config.get("dlp", "advanced_test"): # If the user has decided to enable the advanced test option
+			content_type_pos = re.search("Content-Type:[ ]*([\/a-zA-Z]+)[\s\S]*?", data[:split_pos])
+			if not content_type_pos:
+				return False # The request dosn't have Content-Type field
+			if content_type_pos.group(1) == "text/plain": # If the file is a simple text file, check for C language saved words
+				for test_word in self.config.get("dlp", "vocabulary"):
+					if test_word in data[split_pos+4:]:
+						return False
 		return True
 
 class WebSocketServer(object):
