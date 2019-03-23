@@ -28,20 +28,32 @@ class ClientThread(threading.Thread):
 				if server_port == 20: # FTP
 					if self.check_ftp(data):
 						sock.sendto(data, self.address)
-				elif server_port == 80: # HTTP
-					if self.check_http(data) and self.check_cgit_directory_traversal(data):
+				elif server_port == 25: # SMTP
+					if self.check_smtp(data):
 						sock.sendto(data, self.address)
-#				elif self.check_c_file(data, self.address): # TODO TODO TODO
-#					sock.sendto(data, self.address) # TODO TODO TODO
+				elif server_port == 80: # HTTP
+					if self.check_http(data):
+						sock.sendto(data, self.address)
 			sock.close()
+	def check_ftp(self, data):
+		# Parse magic numbers # Based on https://asecuritysite.com/forensics/magic & https://www.garykessler.net/library/file_sigs.html
+		if data[:2].encode("hex") == "4d5a": # COM, DLL, DRV, EXE, PIF, QTS, QTX, SYS = "4D 5A"
+			return False
+		else:
+			return True
+	def check_smtp(self, data): # TODO TODO TODO
+		return True # TODO TODO TODO
 	def check_http(self, data):
 		split_pos = data.find("\r\n\r\n")
 		if split_pos < 0:
 			return False
+		header_list = [x for x in data[:split_pos].split(" ") if len(x) > 0] # Split the header, ignore double spaces
+		if len(header_list) < 2: # Invalid header
+			return False
 		# Parse "Content-Length"
 		content_length_pos = re.search("Content-Length:[ ]*([0-9]+)[\s\S]*?", data[:split_pos])
 		if not content_length_pos:
-			return False
+			return False # The request dosn't have Content-Length field
 		content_length_pos = int(content_length_pos.group(1))
 		if content_length_pos <= 2000:
 			return False
@@ -52,26 +64,23 @@ class ClientThread(threading.Thread):
 			return False
 		elif data[split_pos+4:split_pos+8].encode("hex") == "504b0304": # DOCX, PPTX, XLSX = "50 4B 03 04"
 			return False
-		else:
-			return True
-	def check_ftp(self, data):
-		# Parse magic numbers # Based on https://asecuritysite.com/forensics/magic & https://www.garykessler.net/library/file_sigs.html
-		if data[:2].encode("hex") == "4d5a": # COM, DLL, DRV, EXE, PIF, QTS, QTX, SYS = "4D 5A"
-			return False
-		else:
-			return True
-	def check_cgit_directory_traversal(self, data): # CVE-2018-14912
-		# Avoid directory traversal by forbidding ".."
-		split_pos = data.find("\r\n\r\n")
-		if split_pos < 0:
-			return False
-		header_list = [x for x in data[:split_pos].split(" ") if len(x) > 0] # Split the header, ignore double spaces
-		header_list[1] = urllib.unquote(header_list[1]) # Convert '%2E' into '.'
-		if (header_list[0].lower() == "get") and ("/objects" in header_list[1]) and (".." in header_list[1]):
-			return False
+		if header_list[0].lower() == "get":
+			# CVE-2018-14912 cgit directory traversal vulnerability, Avoid directory traversal by forbidding ".."
+			path_unquoted = urllib.unquote(header_list[1]) # Convert '%2E' into '.'
+			if ("/objects" in path_unquoted) and (".." in path_unquoted):
+				return False
+			# Check for c files
+			if header_list[1].split("/")[-1].split("?")[0][:-2].lower() == ".c":
+				return False # File extension is '.c'
+			if self.config.get("dlp", "advanced_test"): # If the user has decided to enable the advanced test option
+				content_type_pos = re.search("Content-Type:[ ]*([\/a-zA-Z]+)[\s\S]*?", data[:split_pos])
+				if not content_type_pos:
+					return False # The request dosn't have Content-Type field
+				if content_type_pos.group(1) == "text/plain": # If the file is a simple text file, check for C language saved words
+					for test_word in self.config.get("dlp", "vocabulary"):
+						if test_word in data[split_pos+4:]:
+							return False
 		return True
-#	def check_c_file(self, data): # TODO TODO TODO
-#		return True # TODO TODO TODO
 
 class WebSocketServer(object):
 	def __init__(self, config):
