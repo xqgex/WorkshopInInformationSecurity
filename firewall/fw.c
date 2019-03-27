@@ -354,10 +354,10 @@ unsigned int hook_func(unsigned int hooknum,
 		//
 		action = NF_ACCEPT;
 		reason = REASON_ACCEPTED_BY_PROXY;
-	//Some packet, need to transfer it to the proxy.
+	// Some packet, need to transfer it to the proxy.
 	} else if ((tcp_header != NULL) && ((searched_connection = search_node_conn_table(ip_header->saddr, ip_header->daddr, src_port, dst_port)) != NULL)) { // search the packet in the connection table. src and dst in the connection table. If it is different null, it is found 
 		if (searched_connection->conn->state == STATE_DATA) { // Connection state is 'data' and packet flags match 'data' state flags
-			if ((htons(src_port) == 80 || htons(dst_port) == 80) || htons(src_port) == 20) { // If (source/dest port is 80) or (source port is 20)
+			if (htons(src_port) == 80 || htons(dst_port) == 80 || htons(src_port) == 20 || htons(src_port) == 25 || htons(dst_port) == 25) { // If (source/dest port is 80/25) or (source port is 20)
 				// Save the flags in the connection table
 				update_flags(tcp_header, searched_connection);
 				// Edit packet so it will be Sent to the proxy
